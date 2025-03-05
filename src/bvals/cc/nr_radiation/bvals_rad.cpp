@@ -48,6 +48,8 @@ RadBoundaryVariable::RadBoundaryVariable(MeshBlock *pmb,
 
 int RadBoundaryVariable::LoadBoundaryBufferSameLevel(Real *buf, const NeighborBlock& nb) {
   MeshBlock *pmb = pmy_block_;
+  NRRadiation *prad = pmb->pnrrad;
+  bool use_pol_rad_ = prad->use_pol_rad;
   int si, sj, sk, ei, ej, ek;
 
   si = (nb.ni.ox1 > 0) ? (pmb->ie - NGHOST + 1) : pmb->is;
@@ -58,7 +60,13 @@ int RadBoundaryVariable::LoadBoundaryBufferSameLevel(Real *buf, const NeighborBl
   ek = (nb.ni.ox3 < 0) ? (pmb->ks + NGHOST - 1) : pmb->ke;
   int p = 0;
   AthenaArray<Real> &var = *var_cc;
-  BufferUtility::PackData(var, buf, sk, ek, nl_, nu_, si, ei, sj, ej, p);
+  // BufferUtility::PackData(var, buf, sk, ek, nl_, nu_, si, ei, sj, ej, p);
+  if (!use_pol_rad_) BufferUtility::PackData(var, buf, sk, ek, nl_, nu_, si, ei, sj, ej, p);
+  else { // modifications for polarization
+    int sm = 0;
+    int em = prad->num_stokes-1;
+    BufferUtility::PackData(var, buf, sk, ek, nl_, nu_, sm, em, si, ei, sj, ej, p);
+  }
 
   return p;
 }
@@ -69,6 +77,7 @@ int RadBoundaryVariable::LoadBoundaryBufferSameLevel(Real *buf, const NeighborBl
 //  \brief Set cell-centered boundary buffers for sending to a block on the coarser level
 
 int RadBoundaryVariable::LoadBoundaryBufferToCoarser(Real *buf, const NeighborBlock& nb) {
+  // TODO: implement modifications for polarized RT
   MeshBlock *pmb = pmy_block_;
   MeshRefinement *pmr = pmb->pmr;
   int si, sj, sk, ei, ej, ek;
@@ -87,6 +96,9 @@ int RadBoundaryVariable::LoadBoundaryBufferToCoarser(Real *buf, const NeighborBl
   // function overload to do restriction for radiation variabbles
   pmr->RestrictCellCenteredValues(var, coarse_var, -1, nl_, nu_, si, ei, sj, ej, sk, ek);
   BufferUtility::PackData(coarse_var, buf, sk, ek, nl_, nu_, si, ei, sj, ej, p);
+
+  // TODO: add modifications for polarization
+
   return p;
 }
 
@@ -97,6 +109,7 @@ int RadBoundaryVariable::LoadBoundaryBufferToCoarser(Real *buf, const NeighborBl
 //  \brief Set cell-centered boundary buffers for sending to a block on the finer level
 
 int RadBoundaryVariable::LoadBoundaryBufferToFiner(Real *buf, const NeighborBlock& nb) {
+  // TODO: implement modifications for polarized RT
   MeshBlock *pmb = pmy_block_;
   int si, sj, sk, ei, ej, ek;
   int cn = pmb->cnghost - 1;
@@ -136,6 +149,9 @@ int RadBoundaryVariable::LoadBoundaryBufferToFiner(Real *buf, const NeighborBloc
 
   int p = 0;
   BufferUtility::PackData(var, buf, sk, ek, nl_, nu_, si, ei, sj, ej, p);
+
+  // TODO: add modifications for polarization
+
   return p;
 }
 
@@ -170,9 +186,10 @@ void RadBoundaryVariable::SetBoundaries() {
 //                                                              const NeighborBlock& nb)
 //  \brief Set cell-centered boundary received from a block on the same level
 
-void RadBoundaryVariable::SetBoundarySameLevel(Real *buf,
-                                                        const NeighborBlock& nb) {
+void RadBoundaryVariable::SetBoundarySameLevel(Real *buf, const NeighborBlock& nb) {
   MeshBlock *pmb = pmy_block_;
+  NRRadiation *prad = pmb->pnrrad;
+  bool use_pol_rad_ = prad->use_pol_rad;
   int si, sj, sk, ei, ej, ek;
   AthenaArray<Real> &var = *var_cc;
 
@@ -187,33 +204,41 @@ void RadBoundaryVariable::SetBoundarySameLevel(Real *buf,
   else              sk = pmb->ks - NGHOST, ek = pmb->ks - 1;
 
   int p = 0;
-  // no need to flip for radiation
-  if (nb.polar) {
-    for (int k=sk; k<=ek; ++k) {
-      for (int j=ej; j>=sj; --j) {
-        for (int i=si; i<=ei; ++i) {
+  if (!use_pol_rad_) {
+    // no need to flip for radiation
+    if (nb.polar) {
+      for (int k=sk; k<=ek; ++k) {
+        for (int j=ej; j>=sj; --j) {
+          for (int i=si; i<=ei; ++i) {
 #pragma omp simd linear(p)
-          for (int n=nl_; n<=nu_; ++n) {
-            var(k,j,i,n) = buf[p++];
+            for (int n=nl_; n<=nu_; ++n) {
+              var(k,j,i,n) = buf[p++];
+            }
           }
         }
       }
+    } else {
+      BufferUtility::UnpackData(buf, var, sk, ek, nl_, nu_, si, ei, sj, ej, p);
     }
-  } else {
-    BufferUtility::UnpackData(buf, var, sk, ek, nl_, nu_, si, ei, sj, ej, p);
-  }
+  } else { // modifications for polarization
+    int sm = 0;
+    int em = prad->num_stokes-1;
+    // polarization does not apply for spherical polar coordinates
+    // no need to flip for radiation
+    BufferUtility::UnpackData(buf, var, sk, ek, nl_, nu_, sm, em, si, ei, sj, ej, p);
+  } // endelse
+
   return;
 }
 
 
 
 //----------------------------------------------------------------------------------------
-//! \fn void RadBoundaryVariable::SetBoundaryFromCoarser(Real *buf,
-//                                                                const NeighborBlock& nb)
+//! \fn void RadBoundaryVariable::SetBoundaryFromCoarser(Real *buf, const NeighborBlock& nb)
 //  \brief Set cell-centered prolongation buffer received from a block on a coarser level
 
-void RadBoundaryVariable::SetBoundaryFromCoarser(Real *buf,
-                                                          const NeighborBlock& nb) {
+void RadBoundaryVariable::SetBoundaryFromCoarser(Real *buf, const NeighborBlock& nb) {
+  // TODO: implement modifications for polarized RT
   MeshBlock *pmb = pmy_block_;
   int si, sj, sk, ei, ej, ek;
   int cng = pmb->cnghost;
@@ -266,6 +291,9 @@ void RadBoundaryVariable::SetBoundaryFromCoarser(Real *buf,
   } else {
     BufferUtility::UnpackData(buf, coarse_var, sk, ek, nl_, nu_, si, ei, sj, ej, p);
   }
+
+  // TODO: add modifications for polarization
+
   return;
 }
 
@@ -276,6 +304,7 @@ void RadBoundaryVariable::SetBoundaryFromCoarser(Real *buf,
 //  \brief Set cell-centered boundary received from a block on a finer level
 
 void RadBoundaryVariable::SetBoundaryFromFiner(Real *buf, const NeighborBlock& nb) {
+  // TODO: implement modifications for polarized RT
   MeshBlock *pmb = pmy_block_;
   AthenaArray<Real> &var = *var_cc;
   // receive already restricted data
@@ -340,6 +369,9 @@ void RadBoundaryVariable::SetBoundaryFromFiner(Real *buf, const NeighborBlock& n
   } else {
     BufferUtility::UnpackData(buf, var,  sk, ek, nl_, nu_, si, ei, sj, ej, p);
   }
+
+  // TODO: add modifications for polarization
+
   return;
 }
 
@@ -349,7 +381,6 @@ void RadBoundaryVariable::SetBoundaryFromFiner(Real *buf, const NeighborBlock& n
 //----------------------------------------------------------------------------------------
 //! \fn void RadBoundaryVariable::PolarBoundarySingleAzimuthalBlock()
 // \brief polar boundary edge-case: single MeshBlock spans the entire azimuthal (x3) range
-
 void RadBoundaryVariable::PolarBoundarySingleAzimuthalBlock() {
   MeshBlock *pmb = pmy_block_;
 

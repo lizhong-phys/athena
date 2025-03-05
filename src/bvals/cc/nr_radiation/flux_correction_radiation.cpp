@@ -46,14 +46,13 @@
 //!                                                  const NeighborBlock& nb)
 //! \brief Set surface flux buffers for sending to a block on the same level
 
-int RadBoundaryVariable::LoadFluxBoundaryBufferSameLevel(Real *buf,
-                                                         const NeighborBlock& nb) {
+int RadBoundaryVariable::LoadFluxBoundaryBufferSameLevel(Real *buf, const NeighborBlock& nb) {
   MeshBlock *pmb=pmy_block_;
   NRRadiation *prad = pmb->pnrrad;
+  bool use_pol_rad_ = prad->use_pol_rad;
   Real qomL = pbval_->qomL_;
   int p = 0;
-  if (pbval_->shearing_box == 1 && nb.shear
-      && (nb.fid == BoundaryFace::inner_x1 || nb.fid == BoundaryFace::outer_x1)) {
+  if (pbval_->shearing_box == 1 && nb.shear && (nb.fid == BoundaryFace::inner_x1 || nb.fid == BoundaryFace::outer_x1)) {
     int i;
     int sign;
     if (nb.fid == BoundaryFace::inner_x1) {
@@ -63,26 +62,50 @@ int RadBoundaryVariable::LoadFluxBoundaryBufferSameLevel(Real *buf,
       i = pmb->ie + 1;
       sign =  1;
     }
+
     // pack x1flux
-    for (int k=pmb->ks; k<=pmb->ke; k++) {
-      for (int j=pmb->js; j<=pmb->je; j++) {
-        // convert flux due to velocity difference
-        Real vx = pmb->phydro->w(IVX,k,j,i);
-        Real vy = pmb->phydro->w(IVY,k,j,i);
-        Real vz = pmb->phydro->w(IVZ,k,j,i);
-        Real *mux = &(prad->mu(0,k,j,i,0));
-        Real *muy = &(prad->mu(1,k,j,i,0));
-        Real *muz = &(prad->mu(2,k,j,i,0));
-        Real *flux_lab = &(x1flux(k,j,i,0));
-        prad->pradintegrator->LabToCom(vx,vy,vz,mux,muy,muz,flux_lab,ir_cm_);
-        flux_lab = &(ir_lab_(0));
-        prad->pradintegrator->ComToLab(vx,vy+sign*qomL,vz,mux,muy,muz,ir_cm_,flux_lab);
-        for (int nn=nl_; nn<=nu_; nn++) {
-          buf[p++] = flux_lab[nn];
-        }
-      }
-    }
-  }
+    if (!use_pol_rad_) { // non-polarized radiation
+      for (int k=pmb->ks; k<=pmb->ke; k++) {
+        for (int j=pmb->js; j<=pmb->je; j++) {
+          // convert flux due to velocity difference
+          Real vx = pmb->phydro->w(IVX,k,j,i);
+          Real vy = pmb->phydro->w(IVY,k,j,i);
+          Real vz = pmb->phydro->w(IVZ,k,j,i);
+          Real *mux = &(prad->mu(0,k,j,i,0));
+          Real *muy = &(prad->mu(1,k,j,i,0));
+          Real *muz = &(prad->mu(2,k,j,i,0));
+          Real *flux_lab = &(x1flux(k,j,i,0));
+          prad->pradintegrator->LabToCom(vx,vy,vz,mux,muy,muz,flux_lab,ir_cm_);
+          flux_lab = &(ir_lab_(0));
+          prad->pradintegrator->ComToLab(vx,vy+sign*qomL,vz,mux,muy,muz,ir_cm_,flux_lab);
+          for (int nn=nl_; nn<=nu_; nn++) {
+            buf[p++] = flux_lab[nn];
+          } // endfor nn
+        } // endfor j
+      } // endfor k
+    } else { // pack x1flux for polarized radiation
+      for (int m=0; m<prad->num_stokes; m++) {
+        for (int k=pmb->ks; k<=pmb->ke; k++) {
+          for (int j=pmb->js; j<=pmb->je; j++) {
+            // convert flux due to velocity difference
+            Real vx = pmb->phydro->w(IVX,k,j,i);
+            Real vy = pmb->phydro->w(IVY,k,j,i);
+            Real vz = pmb->phydro->w(IVZ,k,j,i);
+            Real *mux = &(prad->mu(0,k,j,i,0));
+            Real *muy = &(prad->mu(1,k,j,i,0));
+            Real *muz = &(prad->mu(2,k,j,i,0));
+            Real *flux_lab = &(x1flux(m,k,j,i,0));
+            prad->pradintegrator->LabToCom(vx,vy,vz,mux,muy,muz,flux_lab,ir_cm_);
+            flux_lab = &(ir_lab_(0));
+            prad->pradintegrator->ComToLab(vx,vy+sign*qomL,vz,mux,muy,muz,ir_cm_,flux_lab);
+            for (int nn=nl_; nn<=nu_; nn++) {
+              buf[p++] = flux_lab[nn];
+            } // endfor nn
+          } // endfor j
+        } // endfor k
+      } // endfor m
+    } // endelse use_pol_rad_
+  } // endif
   return p;
 }
 
@@ -91,8 +114,7 @@ int RadBoundaryVariable::LoadFluxBoundaryBufferSameLevel(Real *buf,
 //!                                                        const NeighborBlock& nb)
 //! \brief Set surface flux buffers for sending to a block on the coarser level
 
-int RadBoundaryVariable::LoadFluxBoundaryBufferToCoarser(Real *buf,
-                                                         const NeighborBlock& nb) {
+int RadBoundaryVariable::LoadFluxBoundaryBufferToCoarser(Real *buf, const NeighborBlock& nb) {
   MeshBlock *pmb=pmy_block_;
   Coordinates *pco = pmb->pcoord;
   // cache pointers to surface area arrays (BoundaryBase protected variable)
@@ -178,6 +200,9 @@ int RadBoundaryVariable::LoadFluxBoundaryBufferToCoarser(Real *buf,
       }
     }
   }
+
+  // TODO: add modifications for polarization
+
   return p;
 }
 
@@ -222,28 +247,55 @@ void RadBoundaryVariable::SendFluxCorrection() {
 //!                                                               const NeighborBlock& nb)
 //! \brief Set surface flux data received from a block on the same level
 
-void RadBoundaryVariable::SetFluxBoundarySameLevel(Real *buf,
-                                                           const NeighborBlock& nb) {
+void RadBoundaryVariable::SetFluxBoundarySameLevel(Real *buf, const NeighborBlock& nb) {
   MeshBlock *pmb = pmy_block_;
+  NRRadiation *prad = pmb->pnrrad;
+  bool use_pol_rad_ = prad->use_pol_rad;
+
   int p = 0;
 
-  if (nb.fid == BoundaryFace::inner_x1) {
-    for (int k=pmb->ks; k<=pmb->ke; k++) {
-      for (int j=pmb->js; j<=pmb->je; j++) {
-        for (int nn=nl_; nn<=nu_; nn++) {
-          shear_var_flx_[0](k,j,nn) = buf[p++];
+  if (!use_pol_rad_) {
+    if (nb.fid == BoundaryFace::inner_x1) {
+      for (int k=pmb->ks; k<=pmb->ke; k++) {
+        for (int j=pmb->js; j<=pmb->je; j++) {
+          for (int nn=nl_; nn<=nu_; nn++) {
+            shear_var_flx_[0](k,j,nn) = buf[p++];
+          }
         }
       }
-    }
-  } else {
-    for (int k=pmb->ks; k<=pmb->ke; k++) {
-      for (int j=pmb->js; j<=pmb->je; j++) {
-        for (int nn=nl_; nn<=nu_; nn++) {
-          shear_var_flx_[1](k,j,nn) = buf[p++];
+    } else {
+      for (int k=pmb->ks; k<=pmb->ke; k++) {
+        for (int j=pmb->js; j<=pmb->je; j++) {
+          for (int nn=nl_; nn<=nu_; nn++) {
+            shear_var_flx_[1](k,j,nn) = buf[p++];
+          }
         }
       }
-    }
-  }
+    } // endelse nb.fid == BoundaryFace::inner_x1
+  } else { // modifications for polarization
+    if (nb.fid == BoundaryFace::inner_x1) {
+      for (int m=0; m<prad->num_stokes; m++) {
+        for (int k=pmb->ks; k<=pmb->ke; k++) {
+          for (int j=pmb->js; j<=pmb->je; j++) {
+            for (int nn=nl_; nn<=nu_; nn++) {
+              shear_var_flx_[0](m,k,j,nn) = buf[p++];
+            }
+          }
+        }
+      }
+    } else {
+      for (int m=0; m<prad->num_stokes; m++) {
+        for (int k=pmb->ks; k<=pmb->ke; k++) {
+          for (int j=pmb->js; j<=pmb->je; j++) {
+            for (int nn=nl_; nn<=nu_; nn++) {
+              shear_var_flx_[1](m,k,j,nn) = buf[p++];
+            }
+          }
+        }
+      }
+    } // endelse nb.fid == BoundaryFace::inner_x1
+  } // endelse !use_pol_rad_
+
   return;
 }
 
@@ -299,6 +351,9 @@ void RadBoundaryVariable::SetFluxBoundaryFromFiner(Real *buf,
       }
     }
   }
+
+  // TODO: add modifications for polarization
+
   return;
 }
 

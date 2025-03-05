@@ -33,7 +33,7 @@ class CellCenteredBoundaryVariable : public BoundaryVariable {
   CellCenteredBoundaryVariable(MeshBlock *pmb,
                                AthenaArray<Real> *var, AthenaArray<Real> *coarse_var,
                                AthenaArray<Real> *var_flux, bool fflux);
-    //override function for arrays need different initialization of nu_
+  //override function for arrays need different initialization of nu_
   CellCenteredBoundaryVariable(MeshBlock *pmb,
                                AthenaArray<Real> *var, AthenaArray<Real> *coarse_var,
                                AthenaArray<Real> *var_flux, bool fflux, int flag);
@@ -149,6 +149,7 @@ class CellCenteredBoundaryVariable : public BoundaryVariable {
   //! shearing box:
   //! working arrays of remapped quantities
   AthenaArray<Real>  shear_cc_[2];
+  bool use_pol_rad = false; // modifications for polarization
 
  private:
   //!@{

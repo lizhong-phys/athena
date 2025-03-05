@@ -192,6 +192,13 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
   dxw1_.NewAthenaArray(ncells1);
   dxw2_.NewAthenaArray(ncells1);
 
+  /***** modifications for polarization *****/
+  if (prad->use_pol_rad) {
+    ir_cm_.DeleteAthenaArray();
+    ir_cm_.NewAthenaArray(prad->num_stokes, prad->n_fre_ang);
+  }
+  /***** modifications for polarization *****/
+
   //----------------------------------------------------
   // array for multi-group
   if (nfreq > 1) {
@@ -391,6 +398,7 @@ void RadIntegrator::GetTgasVel(MeshBlock *pmb, const Real dt,
   Coordinates *pco=pmb->pcoord;
 
   const Real& prat = prad->prat;
+  bool use_pol_rad_ = prad->use_pol_rad;
   Real invcrat = 1.0/prad->crat;
 
   const int &nang =prad->nang;
@@ -427,7 +435,7 @@ void RadIntegrator::GetTgasVel(MeshBlock *pmb, const Real dt,
         // calculate radiation energy density
         Real er = 0.0;
         for (int ifr=0; ifr<nfreq; ++ifr) {
-          Real *irn = &(ir(k,j,i,ifr*nang));
+          Real *irn = (!use_pol_rad_) ? &(ir(k,j,i,ifr*nang)) : &(ir(k,j,i,0,ifr*nang));
           Real *weight = &(prad->wmu(0));
           Real er_freq = 0.0;
 #pragma omp simd reduction(+:er_freq)
@@ -673,6 +681,7 @@ void RadIntegrator::PredictVel(AthenaArray<Real> &ir, int k, int j, int i,
   NRRadiation *prad = pmy_rad;
 
   const Real &prat = prad->prat;
+  bool use_pol_rad_ = prad->use_pol_rad;
   Real invcrat = 1.0/prad->crat;
   Real ct = dt * prad->reduced_c;
   const int& nang =prad->nang;
@@ -687,7 +696,7 @@ void RadIntegrator::PredictVel(AthenaArray<Real> &ir, int k, int j, int i,
         pr11_f=0.0,pr12_f=0.0,pr13_f=0.0,pr22_f=0.0,
         pr23_f=0.0,pr33_f=0.0;
 
-    Real *irn = &(ir(k,j,i,ifr*nang));
+    Real *irn = (!use_pol_rad_) ? &(ir(k,j,i,ifr*nang)) : &(ir(k,j,i,0,ifr*nang));
     Real *cosx = &(prad->mu(0,k,j,i,0));
     Real *cosy = &(prad->mu(1,k,j,i,0));
     Real *cosz = &(prad->mu(2,k,j,i,0));

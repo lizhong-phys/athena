@@ -302,7 +302,8 @@ void Reconstruction::PiecewiseParabolicX1(
     const AthenaArray<Real> &q, const int array_order,
     AthenaArray<Real> &ql, AthenaArray<Real> &qr) {
 
-  if (array_order < 0) {
+  if ((array_order < 0) || ((array_order >= 0) && (array_order <= 3))) {
+    int polIdx = array_order;
     const int nu = q.GetDim1() - 1;
     // CS08 constant used in second derivative limiter, >1 , independent of h
     const Real C2 = 1.25;
@@ -328,11 +329,11 @@ void Reconstruction::PiecewiseParabolicX1(
     for (int i=il; i<=iu; ++i) {
 #pragma omp simd
       for (int n=0; n<=nu; ++n) {
-        q_i  (n,i) = q(k,j,i  ,n);
-        q_im2(n,i) = q(k,j,i-2,n);
-        q_im1(n,i) = q(k,j,i-1,n);
-        q_ip1(n,i) = q(k,j,i+1,n);
-        q_ip2(n,i) = q(k,j,i+2,n);
+        q_i  (n,i) = (polIdx < 0) ? q(k,j,i  ,n) : q(k,j,i  ,polIdx,n);
+        q_im2(n,i) = (polIdx < 0) ? q(k,j,i-2,n) : q(k,j,i-2,polIdx,n);
+        q_im1(n,i) = (polIdx < 0) ? q(k,j,i-1,n) : q(k,j,i-1,polIdx,n);
+        q_ip1(n,i) = (polIdx < 0) ? q(k,j,i+1,n) : q(k,j,i+1,polIdx,n);
+        q_ip2(n,i) = (polIdx < 0) ? q(k,j,i+2,n) : q(k,j,i+2,polIdx,n);
       }
     }
 
@@ -813,7 +814,8 @@ void Reconstruction::PiecewiseParabolicX2(
     const int k, const int j, const int il, const int iu,
     const AthenaArray<Real> &q, const int array_order,
     AthenaArray<Real> &ql, AthenaArray<Real> &qr) {
-  if (array_order < 0) {
+  if ((array_order < 0) || ((array_order >= 0) && (array_order <= 3))) {
+    int polIdx = array_order;
     const int nu = q.GetDim1() - 1;
   // CS08 constant used in second derivative limiter, >1 , independent of h
     const Real C2 = 1.25;
@@ -837,11 +839,11 @@ void Reconstruction::PiecewiseParabolicX2(
     for (int i=il; i<=iu; ++i) {
 #pragma omp simd
       for (int n=0; n<=nu; ++n) {
-        q_j  (n,i) = q(k,j  ,i,n);
-        q_jm2(n,i) = q(k,j-2,i,n);
-        q_jm1(n,i) = q(k,j-1,i,n);
-        q_jp1(n,i) = q(k,j+1,i,n);
-        q_jp2(n,i) = q(k,j+2,i,n);
+        q_j  (n,i) = (polIdx < 0) ? q(k,j  ,i,n) : q(k,j  ,i,polIdx,n);
+        q_jm2(n,i) = (polIdx < 0) ? q(k,j-2,i,n) : q(k,j-2,i,polIdx,n);
+        q_jm1(n,i) = (polIdx < 0) ? q(k,j-1,i,n) : q(k,j-1,i,polIdx,n);
+        q_jp1(n,i) = (polIdx < 0) ? q(k,j+1,i,n) : q(k,j+1,i,polIdx,n);
+        q_jp2(n,i) = (polIdx < 0) ? q(k,j+2,i,n) : q(k,j+2,i,polIdx,n);
       }
     }
 
@@ -1317,7 +1319,8 @@ void Reconstruction::PiecewiseParabolicX3(
     const AthenaArray<Real> &q, const int array_order,
     AthenaArray<Real> &ql, AthenaArray<Real> &qr) {
 
-  if (array_order < 0) {
+  if ((array_order < 0) || ((array_order >= 0) && (array_order <= 3))) {
+    int polIdx = array_order;
     const int nu = q.GetDim1() - 1;
     // CS08 constant used in second derivative limiter, >1 , independent of h
     const Real C2 = 1.25;
@@ -1340,11 +1343,11 @@ void Reconstruction::PiecewiseParabolicX3(
     for (int i=il; i<=iu; ++i) {
 //#pragma omp simd
       for (int n=0; n<=nu; ++n) {
-        q_k  (n,i) = q(k  ,j,i,n);
-        q_km2(n,i) = q(k-2,j,i,n);
-        q_km1(n,i) = q(k-1,j,i,n);
-        q_kp1(n,i) = q(k+1,j,i,n);
-        q_kp2(n,i) = q(k+2,j,i,n);
+        q_k  (n,i) = (polIdx < 0) ? q(k  ,j,i,n) : q(k  ,j,i,polIdx,n);
+        q_km2(n,i) = (polIdx < 0) ? q(k-2,j,i,n) : q(k-2,j,i,polIdx,n);
+        q_km1(n,i) = (polIdx < 0) ? q(k-1,j,i,n) : q(k-1,j,i,polIdx,n);
+        q_kp1(n,i) = (polIdx < 0) ? q(k+1,j,i,n) : q(k+1,j,i,polIdx,n);
+        q_kp2(n,i) = (polIdx < 0) ? q(k+2,j,i,n) : q(k+2,j,i,polIdx,n);
       }
     }
 

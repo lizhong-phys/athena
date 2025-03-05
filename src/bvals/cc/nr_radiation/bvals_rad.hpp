@@ -34,9 +34,7 @@ class RadBoundaryVariable : public CellCenteredBoundaryVariable {
   void SendFluxCorrection() override;
   bool ReceiveFluxCorrection() override;
 
-
   void SetBoundaries() override;
-
 
   // function for shearing box
   void AddRadShearForInit();

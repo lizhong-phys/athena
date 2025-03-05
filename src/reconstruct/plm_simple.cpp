@@ -112,7 +112,8 @@ void Reconstruction::PiecewiseLinearX1(
     AthenaArray<Real> &q, const int array_order,
     AthenaArray<Real> &ql, AthenaArray<Real> &qr) {
   Coordinates *pco = pmy_block_->pcoord;
-  if (array_order < 0) {
+  if ((array_order < 0) || ((array_order >= 0) && (array_order <= 3))) {
+    int polIdx = array_order;
     // set work arrays to shallow copies of scratch arrays
     AthenaArray<Real> &qc = scr1_in2_, &dql = scr2_in2_, &dqr = scr3_in2_,
                      &dqm = scr4_in2_;
@@ -120,12 +121,12 @@ void Reconstruction::PiecewiseLinearX1(
 
     // compute L/R slopes for each variable
     for (int i=il; i<=iu; ++i) {
+      Real *qn   = (polIdx < 0) ? &(q(k,j,i,0))   : &(q(k,j,i,polIdx,0));
+      Real *q1n  = (polIdx < 0) ? &(q(k,j,i+1,0)) : &(q(k,j,i+1,polIdx,0));
+      Real *q2n  = (polIdx < 0) ? &(q(k,j,i-1,0)) : &(q(k,j,i-1,polIdx,0));
       Real *dqln = &(dql(i,0));
       Real *dqrn = &(dqr(i,0));
-      Real *qn = &(q(k,j,i,0));
-      Real *q1n = &(q(k,j,i+1,0));
-      Real *q2n = &(q(k,j,i-1,0));
-      Real *qcn = &(qc(i,0));
+      Real *qcn  = &(qc(i,0));
       for (int n=0; n<=nu; ++n) {
         dqln[n] = (qn[n] - q2n[n]);
         dqrn[n] = (q1n[n] - qn[n]);
@@ -280,7 +281,8 @@ void Reconstruction::PiecewiseLinearX2(
     AthenaArray<Real> &q, const int array_order,
     AthenaArray<Real> &ql, AthenaArray<Real> &qr) {
   Coordinates *pco = pmy_block_->pcoord;
-  if (array_order < 0) {
+  if ((array_order < 0) || ((array_order >= 0) && (array_order <= 3))) {
+    int polIdx = array_order;
     // set work arrays to shallow copies of scratch arrays
     AthenaArray<Real> &qc = scr1_in2_, &dql = scr2_in2_,
                      &dqr = scr3_in2_, &dqm = scr4_in2_;
@@ -288,12 +290,12 @@ void Reconstruction::PiecewiseLinearX2(
 
     // compute L/R slopes for each variable
     for (int i=il; i<=iu; ++i) {
+      Real *qn   = (polIdx < 0) ? &(q(k,j  ,i,0)) : &(q(k,j  ,i,polIdx,0));
+      Real *q1n  = (polIdx < 0) ? &(q(k,j+1,i,0)) : &(q(k,j+1,i,polIdx,0));
+      Real *q2n  = (polIdx < 0) ? &(q(k,j-1,i,0)) : &(q(k,j-1,i,polIdx,0));
       Real *dqln = &(dql(i,0));
       Real *dqrn = &(dqr(i,0));
-      Real *qcn = &(qc(i,0));
-      Real *qn  = &(q(k,j  ,i,0));
-      Real *q1n = &(q(k,j+1,i,0));
-      Real *q2n = &(q(k,j-1,i,0));
+      Real *qcn  = &(qc(i,0));
       for (int n=0; n<=nu; ++n) {
         // renamed dw* -> dq* from plm.cpp
         dqln[n] = (qn[n] - q2n[n]);
@@ -444,7 +446,8 @@ void Reconstruction::PiecewiseLinearX3(
     AthenaArray<Real> &q, const int array_order,
     AthenaArray<Real> &ql, AthenaArray<Real> &qr) {
   Coordinates *pco = pmy_block_->pcoord;
-  if (array_order < 0) {
+  if ((array_order < 0) || ((array_order >= 0) && (array_order <= 3))) {
+    int polIdx = array_order;
     // set work arrays to shallow copies of scratch arrays
     AthenaArray<Real> &qc = scr1_in2_, &dql = scr2_in2_, &dqr = scr3_in2_,
                      &dqm = scr4_in2_;
@@ -452,12 +455,12 @@ void Reconstruction::PiecewiseLinearX3(
 
     // compute L/R slopes for each variable
     for (int i=il; i<=iu; ++i) {
+      Real *qn  = (polIdx < 0) ? &(q(k,j  ,i,0)) : &(q(k,j  ,i,polIdx,0));
+      Real *q1n = (polIdx < 0) ? &(q(k+1,j,i,0)) : &(q(k+1,j,i,polIdx,0));
+      Real *q2n = (polIdx < 0) ? &(q(k-1,j,i,0)) : &(q(k-1,j,i,polIdx,0));
       Real *dqln = &(dql(i,0));
       Real *dqrn = &(dqr(i,0));
-      Real *qcn = &(qc(i,0));
-      Real *qn  = &(q(k,j  ,i,0));
-      Real *q1n = &(q(k+1,j,i,0));
-      Real *q2n = &(q(k-1,j,i,0));
+      Real *qcn  = &(qc(i,0));
       for (int n=0; n<=nu; ++n) {
         // renamed dw* -> dq* from plm.cpp
         dqln[n] = (qn[n] - q2n[n]);
@@ -479,7 +482,6 @@ void Reconstruction::PiecewiseLinearX3(
           if (dq2 <= 0.0) dqmn[n] = 0.0;
         }
       }
-
       // Apply original VL limiter's general expression for a Cartesian-like
       // coordinate system with nonuniform mesh spacing
     } else {

@@ -1799,7 +1799,8 @@ void Mesh::Initialize(int res_flag, ParameterInput *pin) {
           pmb = my_blocks(i); ph = pmb->phydro;
           NRRadiation *prad = pmb->pnrrad;
           prad->UserFrequency(prad);
-          prad->CalculateMoment(prad->ir);
+          if (prad->use_pol_rad) prad->CalculateFullMoment(prad->ir);
+          else prad->CalculateMoment(prad->ir);
           prad->UpdateOpacity(pmb,ph->w);
         }
       }

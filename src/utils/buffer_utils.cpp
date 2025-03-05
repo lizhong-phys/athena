@@ -26,11 +26,11 @@ template <typename T> void PackData(const AthenaArray<T> &src, T *buf,
          int sn, int en, int sm, int em,
          int si, int ei, int sj, int ej, int sk, int ek, int &offset) {
   for (int n=sn; n<=en; ++n) {
-    for (int k=sk; k<=ek; k++) {
-      for (int j=sj; j<=ej; j++) {
-        for (int i=si; i<=ei; i++) {
+    for (int k=sk; k<=ek; ++k) {
+      for (int j=sj; j<=ej; ++j) {
+        for (int i=si; i<=ei; ++i) {
 #pragma omp simd
-          for (int m=sm; m<=em; m++) {
+          for (int m=sm; m<=em; ++m) {
             buf[offset++] = src(n,k,j,i,m);
           }
         }

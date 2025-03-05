@@ -2661,6 +2661,7 @@ TaskStatus TimeIntegratorTaskList::CalculateFieldOrbital(MeshBlock *pmb, int sta
 
 TaskStatus TimeIntegratorTaskList::IntegrateRad(MeshBlock *pmb, int stage) {
   NRRadiation *prad = pmb->pnrrad;
+  bool use_pol_rad_ = prad->use_pol_rad;
 
   if (stage <= nstages) {
     if (stage_wghts[stage-1].main_stage) {
@@ -2668,7 +2669,8 @@ TaskStatus TimeIntegratorTaskList::IntegrateRad(MeshBlock *pmb, int stage) {
       ave_wghts[0] = 1.0;
       ave_wghts[1] = stage_wghts[stage-1].delta;
       ave_wghts[2] = 0.0;
-      pmb->WeightedAve(prad->ir1, prad->ir, prad->ir2, ave_wghts,1);
+      if (use_pol_rad_) pmb->WeightedAve(prad->ir1, prad->ir, prad->ir2, ave_wghts, 2);
+      else pmb->WeightedAve(prad->ir1, prad->ir, prad->ir2, ave_wghts, 1);
 
       ave_wghts[0] = stage_wghts[stage-1].gamma_1;
       ave_wghts[1] = stage_wghts[stage-1].gamma_2;
@@ -2676,11 +2678,13 @@ TaskStatus TimeIntegratorTaskList::IntegrateRad(MeshBlock *pmb, int stage) {
       if (ave_wghts[0] == 0.0 && ave_wghts[1] == 1.0 && ave_wghts[2] == 0.0) {
         prad->ir.SwapAthenaArray(prad->ir1);
       } else {
-        pmb->WeightedAve(prad->ir, prad->ir1, prad->ir2, ave_wghts,1);
+        if (use_pol_rad_) pmb->WeightedAve(prad->ir, prad->ir1, prad->ir2, ave_wghts, 2);
+        else pmb->WeightedAve(prad->ir, prad->ir1, prad->ir2, ave_wghts, 1);
       }
       const Real wght = stage_wghts[stage-1].beta*pmb->pmy_mesh->dt;
       // ir is already partially updated
-      prad->pradintegrator->FluxDivergence(wght, prad->ir, prad->ir);
+      if (use_pol_rad_) prad->pradintegrator->PolFluxDivergence(wght, prad->ir, prad->ir);
+      else prad->pradintegrator->FluxDivergence(wght, prad->ir, prad->ir);
 
       // no geometric source term for radiation
 
@@ -2694,8 +2698,13 @@ TaskStatus TimeIntegratorTaskList::IntegrateRad(MeshBlock *pmb, int stage) {
         const Real beta = 0.063692468666290; // F(u^(3)) coeff.
         const Real wght_ssp = beta*pmb->pmy_mesh->dt;
         // writing out to u2 register
-        pmb->WeightedAve(prad->ir2, prad->ir1, prad->ir2, ave_wghts,1);
-        prad->pradintegrator->FluxDivergence(wght_ssp, prad->ir2, prad->ir2);
+        if (use_pol_rad_) {
+          pmb->WeightedAve(prad->ir2, prad->ir1, prad->ir2, ave_wghts, 2);
+          prad->pradintegrator->PolFluxDivergence(wght_ssp, prad->ir2, prad->ir2);
+        } else {
+          pmb->WeightedAve(prad->ir2, prad->ir1, prad->ir2, ave_wghts, 1);
+          prad->pradintegrator->FluxDivergence(wght_ssp, prad->ir2, prad->ir2);
+        } // endelse use_pol_rad_
       }
     }
     return TaskStatus::next;
@@ -2707,19 +2716,21 @@ TaskStatus TimeIntegratorTaskList::IntegrateRad(MeshBlock *pmb, int stage) {
 TaskStatus TimeIntegratorTaskList::CalculateRadFlux(MeshBlock *pmb, int stage) {
   Hydro *phydro = pmb->phydro;
   NRRadiation *prad = pmb->pnrrad;
+  bool use_pol_rad_ = prad->use_pol_rad;
   if (stage_wghts[stage-1].main_stage) {
     Real dt = (stage_wghts[(stage-1)].beta)*(pmb->pmy_mesh->dt);
-    prad->pradintegrator->GetTgasVel(pmb,dt,phydro->u,phydro->w,
-                                   pmb->pfield->bcc,prad->ir);
+    prad->pradintegrator->GetTgasVel(pmb, dt, phydro->u, phydro->w,
+                                     pmb->pfield->bcc, prad->ir);
   }
 
   if (stage <= nstages) {
     if (stage_wghts[stage-1].main_stage) {
       if ((stage == 1) && (integrator == "vl2")) {
-        prad->pradintegrator->CalculateFluxes(phydro->w,  prad->ir, 1);
+        if (use_pol_rad_) prad->pradintegrator->CalculatePolFluxes(phydro->w,  prad->ir, 1);
+        else prad->pradintegrator->CalculateFluxes(phydro->w,  prad->ir, 1);
       } else {
-        prad->pradintegrator->CalculateFluxes(phydro->w,  prad->ir,
-                                     prad->pradintegrator->rad_xorder);
+        if (use_pol_rad_) prad->pradintegrator->CalculatePolFluxes(phydro->w,  prad->ir, prad->pradintegrator->rad_xorder);
+        else prad->pradintegrator->CalculateFluxes(phydro->w,  prad->ir, prad->pradintegrator->rad_xorder);
       }
     }
     return TaskStatus::next;
@@ -2734,6 +2745,7 @@ TaskStatus TimeIntegratorTaskList::CalculateRadFlux(MeshBlock *pmb, int stage) {
 TaskStatus TimeIntegratorTaskList::AddSourceTermsRad(MeshBlock *pmb, int stage) {
   Hydro *ph = pmb->phydro;
   NRRadiation *prad = pmb->pnrrad;
+  bool use_pol_rad_ = prad->use_pol_rad;
 
   int is=pmb->is, ie=pmb->ie;
   int js=pmb->js, je=pmb->je;
@@ -2754,13 +2766,14 @@ TaskStatus TimeIntegratorTaskList::AddSourceTermsRad(MeshBlock *pmb, int stage) 
       for(int k=ks; k<=ke; ++k)
         for(int j=js; j<=je; ++j)
           for(int i=is; i<=ie; ++i) {
-            prad->pradintegrator->CalSourceTerms(pmb, dt, k, j, i, ph->u,
-                                                       prad->ir, prad->ir);
+            // if (!use_pol_rad_) prad->pradintegrator->CalSourceTerms(pmb, dt, k, j, i, ph->u, prad->ir, prad->ir);
           }
 
       if (prad->set_source_flag > 0) {
-        prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
-        prad->pradintegrator->AddSourceTerms(pmb, ph->u);
+        // if (!use_pol_rad_) {
+        //   prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
+        //   prad->pradintegrator->AddSourceTerms(pmb, ph->u);
+        // }
       }
     }
     return TaskStatus::next;

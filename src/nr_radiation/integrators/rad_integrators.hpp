@@ -170,10 +170,15 @@ class RadIntegrator {
   AthenaArray<Real> delta_source; // calculate delta E, delta Fr per frequency
                                   // then sum the different across fre
 
+  /***** modifications for polarization *****/
+  void CalculatePolFluxes(AthenaArray<Real> &w, AthenaArray<Real> &ir, const int order);
+  void PolFluxDivergence(const Real wght, AthenaArray<Real> &ir_in, AthenaArray<Real> &ir_out);
+  /***** modifications for polarization *****/
+
  private:
   AthenaArray<Real> vel_, velx_,vely_,velz_;
   AthenaArray<Real> il_, ilb_, ir_;// for recontruction
-                          // temporary array to store the flux, velocity
+  // temporary array to store the flux, velocity
   AthenaArray<Real> vncsigma_, vncsigma2_, wmu_cm_, tran_coef_, ir_cm_;
   AthenaArray<Real> cm_to_lab_;
   AthenaArray<Real> g_zeta_, q_zeta_, ql_zeta_, qr_zeta_, zeta_flux_, zeta_area_;

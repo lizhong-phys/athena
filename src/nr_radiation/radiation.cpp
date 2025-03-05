@@ -256,6 +256,55 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
     rad_mom_cm_nu.NewAthenaArray(4*nfreq,nc3,nc2,nc1);
   }
 
+  /***** modifications for polarization *****/
+  use_pol_rad = pin->GetOrAddBoolean("radiation", "polarization", false);
+  if (use_pol_rad) {
+    // check if polarized radiation transfer can be used
+    if ((angle_flag == 1) || (std::strcmp(COORDINATE_SYSTEM, "cartesian") != 0)) {
+      std::stringstream msg;
+      msg << "### FATAL ERROR in radiation class" << std::endl
+          << "Stokes parameters have to be defined in Cartesian" << std::endl;
+      ATHENA_ERROR(msg);
+    }
+    if (nfreq > 1) {
+      std::stringstream msg;
+      msg << "### FATAL ERROR in radiation class" << std::endl
+          << "Stokes parameters have to be frequency-integrated" << std::endl;
+      ATHENA_ERROR(msg);
+    }
+    if (IM_RADIATION_ENABLED) {
+      std::stringstream msg;
+      msg << "### FATAL ERROR in radiation class" << std::endl
+          << "Stokes parameters are only implicitly updated with source terms" << std::endl;
+      ATHENA_ERROR(msg);
+    }
+    // deconstruct variables
+    ir.DeleteAthenaArray();
+    ir1.DeleteAthenaArray();
+    ir_old.DeleteAthenaArray();
+    if (integrator == "ssprk5_4" || STS_ENABLED) ir2.DeleteAthenaArray();
+    flux[0].DeleteAthenaArray();
+    if (pmb->pmy_mesh->f2) flux[1].DeleteAthenaArray();
+    if (pmb->pmy_mesh->f3) flux[2].DeleteAthenaArray();
+    if (pmb->pmy_mesh->multilevel) coarse_ir_.DeleteAthenaArray();
+    rad_bvar.~RadBoundaryVariable();
+    // reconstruct above variables
+    ir.NewAthenaArray(nc3, nc2, nc1, num_stokes, n_fre_ang);
+    ir1.NewAthenaArray(nc3, nc2, nc1, num_stokes, n_fre_ang);
+    ir_old.NewAthenaArray(nc3, nc2, nc1, num_stokes, n_fre_ang);
+    if (integrator == "ssprk5_4" || STS_ENABLED) ir2.NewAthenaArray(nc3, nc2, nc1, num_stokes, n_fre_ang);
+    flux[0].NewAthenaArray(num_stokes, nc3, nc2, nc1+1, n_fre_ang);
+    if (pmb->pmy_mesh->f2) flux[1].NewAthenaArray(num_stokes, nc3, nc2+1, nc1, n_fre_ang);
+    if (pmb->pmy_mesh->f3) flux[2].NewAthenaArray(num_stokes, nc3+1, nc2, nc1, n_fre_ang);
+    if (pmb->pmy_mesh->multilevel) coarse_ir_.NewAthenaArray(pmb->ncc3, pmb->ncc2, pmb->ncc1, num_stokes, n_fre_ang);
+    new (&rad_bvar) RadBoundaryVariable(pmb, &ir, &coarse_ir_, flux);
+    // initialize full moment set
+    rad_pol_mom.NewAthenaArray((num_stokes-1)*num_moments_per_stok,nc3,nc2,nc1);
+    rad_full_mom_cm.NewAthenaArray(num_stokes*num_moments_per_stok,nc3,nc2,nc1);
+    rad_spec_mom_cm.NewAthenaArray(num_spec_moments_in_tot,nc3,nc2,nc1); // PQ^c, PQ^s, PU^zc, PU^zs
+  }
+  /***** modifications for polarization *****/
+
   // the equation is
   // (sigma_s+sigma_a)(J-I)  // Rosseland mean
   // + sigma_p * a_rT^4 - sigma_pe * J // Planck mean

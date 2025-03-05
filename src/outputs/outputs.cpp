@@ -864,6 +864,25 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
         AppendOutputDataNode(pod);
         num_vars_++;
       }
+
+      /***** modifications for polarization *****/
+      if (prad->use_pol_rad) {
+        int QIdxs = 0*prad->num_moments_per_stok;
+        int UIdxs = 1*prad->num_moments_per_stok;
+        int VIdxs = 2*prad->num_moments_per_stok;
+        if (ContainVariable(output_params.variable, "Er_Q") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Er_Q";
+          pod->data.InitWithShallowSlice(prad->rad_pol_mom,4,QIdxs+IER,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+      }
+      /***** modifications for polarization *****/
+
     } else {
       //--------/--------/--------/--------/--------/--------/--------
       for(int ifr=0; ifr<prad->nfreq; ++ifr) {
@@ -1374,8 +1393,13 @@ void Outputs::MakeOutputs(Mesh *pm, ParameterInput *pin, bool wtflag) {
         for(int b=0; b<pm->nblocal; ++b) {
           pmb = pm->my_blocks(b);
           // Calculate Com-moving moments and grey opacity for dump
-          pmb->pnrrad->CalculateMoment(pmb->pnrrad->ir);
-          pmb->pnrrad->CalculateComMoment();
+          if (pmb->pnrrad->use_pol_rad) {
+            pmb->pnrrad->CalculateFullMoment(pmb->pnrrad->ir);
+            pmb->pnrrad->CalculateFullComMoment();
+          } else {
+            pmb->pnrrad->CalculateMoment(pmb->pnrrad->ir);
+            pmb->pnrrad->CalculateComMoment();
+          }
         }
         rad_mom = false;
       }

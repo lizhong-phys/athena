@@ -461,6 +461,312 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &w,
 }
 
 
+// calculate the transport flux in polarized RT
+void RadIntegrator::CalculatePolFluxes(AthenaArray<Real> &w, AthenaArray<Real> &ir, const int order) {
+  NRRadiation *prad=pmy_rad;
+  MeshBlock *pmb=prad->pmy_block;
+  Coordinates *pco=pmb->pcoord;
+
+  int nang=prad->nang;
+  int nfreq=prad->nfreq;
+  int nstok=prad->num_stokes;
+  // Real invcrat=1.0/pmy_rad->crat;
+
+  // int ncells1 = pmb->ncells1, ncells2 = pmb->ncells2,
+  // ncells3 = pmb->ncells3;
+  // Real tau_fact;
+
+  AthenaArray<Real> &x1flux=prad->flux[X1DIR];
+
+  int is = pmb->is; int js = pmb->js; int ks = pmb->ks;
+  int ie = pmb->ie; int je = pmb->je; int ke = pmb->ke;
+  // int il, iu, jl, ju, kl, ku;
+  // jl = js, ju=je, kl=ks, ku=ke;
+
+  // if (ncells2 > 1) {
+  //   if (ncells3 == 1) {
+  //     jl=js-1, ju=je+1, kl=ks, ku=ke;
+  //   } else {
+  //     jl=js-1, ju=je+1, kl=ks-1, ku=ke+1;
+  //   }
+  // }
+
+  //-----------------------------------------------------------------------------
+  // i-direction
+  for (int m=0; m<nstok; ++m){
+    for (int k=ks; k<=ke; ++k) {
+      for (int j=js; j<=je; ++j) {
+        pco->CenterWidth1(k,j,is-1,ie+1,dxw1_);
+        for (int i=is; i<=ie+1; ++i) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            // use the signal speed in each frequency group
+            Real sigmal = prad->sigma_a(k,j,i-1,ifr) + prad->sigma_s(k,j,i-1,ifr);
+            Real sigmar = prad->sigma_a(k,j,i,ifr) + prad->sigma_s(k,j,i,ifr);
+            Real taul = dxw1_(i-1) * sigmal;
+            Real taur = dxw1_(i) * sigmar;
+
+            Real f_l = 1.0;
+            Real f_r = 1.0;
+            taul *= taufact(k,j,i-1);
+            taur *= taufact(k,j,i);
+            GetTaufactor(taul+taur,f_r,1);
+            GetTaufactor(taul+taur,f_l,-1);
+
+            Real *s1n = &(sfac1_x_(i,ifr*nang));
+            Real *s2n = &(sfac2_x_(i,ifr*nang));
+            Real *velxn = &(velx_(k,j,i,ifr*nang));
+            Real adv = adv_vel(0,k,j,i);
+            SignalSpeed(adv, f_l, f_r, velxn, s1n, s2n);
+          } // endfor ifr
+        } // endfor i
+
+        if (order == 1) {
+          pmb->precon->DonorCellX1(k, j, is-1, ie+1, ir, m, il_, ir_);
+        } else if (order == 2) {
+          pmb->precon->PiecewiseLinearX1(k, j, is-1, ie+1, ir, m, il_, ir_);
+        } else {
+          pmb->precon->PiecewiseParabolicX1(k, j, is-1, ie+1, ir, m, il_, ir_);
+        }
+
+        // calculate flux with HLLE type flux
+        //(smax F(u_L) - Smin F(U_R))/(smax-smin)+smax*smin(u(R)-u_L)/(smax-smin)
+        for (int i=is; i<=ie+1; ++i) {
+          Real *vel = &(velx_(k,j,i,0));
+          Real *smax = &(sfac1_x_(i,0));
+          Real *smin = &(sfac2_x_(i,0));
+          Real *irln = &(il_(i,0));
+          Real *irrn = &(ir_(i,0));
+          Real adv = 0.0;
+          if (adv_flag_ > 0) {
+            adv = adv_vel(0,k,j,i);
+          }
+          Real *sm_diff = &(sm_diff1_(0));
+          for (int n=0; n<prad->n_fre_ang; ++n) {
+            Real diff = smax[n] - smin[n];
+            if (std::abs(diff) < TINY_NUMBER)
+              sm_diff[n] = 0.0;
+            else
+              sm_diff[n] = 1.0/diff;
+          }
+          for (int n=0; n<prad->n_fre_ang; ++n) {
+            Real vl = vel[n] - adv;
+            x1flux(m,k,j,i,n) = smax[n] * (vl - smin[n]) * irln[n] * sm_diff[n]
+                              + smin[n] * (smax[n] - vl) * irrn[n] * sm_diff[n];
+          }
+          if (adv_flag_ > 0) {
+            const Real &advv = adv_vel(0,k,j,i);
+            if (advv >0) {
+              for (int n=0; n<prad->n_fre_ang; ++n) {
+                x1flux(m,k,j,i,n) += advv * irln[n];
+              }
+            } else {
+              for (int n=0; n<prad->n_fre_ang; ++n) {
+                x1flux(m,k,j,i,n) += advv * irrn[n];
+              }
+            }
+          }
+        } // endfor i
+      } // endfor j
+    } // endfor k
+  } // endfor m
+
+  // j-direction
+  if (pmb->pmy_mesh->f2) {
+    AthenaArray<Real> &x2flux=prad->flux[X2DIR];
+
+    for (int m=0; m<nstok; ++m) {
+      for (int k=ks; k<=ke; ++k) {
+        // first, calculate speed
+        for (int j=js; j<=je+1; ++j) {
+          pco->CenterWidth2(k,j-1,is,ie,dxw1_);
+          pco->CenterWidth2(k,j,is,ie,dxw2_);
+          for (int i=is; i<=ie; ++i) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              Real sigmal = prad->sigma_a(k,j-1,i,ifr) + prad->sigma_s(k,j-1,i,ifr);
+              Real sigmar = prad->sigma_a(k,j,i,ifr) + prad->sigma_s(k,j,i,ifr);
+              Real taul = dxw1_(i) * sigmal;
+              Real taur = dxw2_(i) * sigmar;
+
+              Real f_l = 1.0;
+              Real f_r = 1.0;
+              taul *= taufact(k,j-1,i);
+              taur *= taufact(k,j,i);
+              GetTaufactor(taul+taur,f_r,1);
+              GetTaufactor(taul+taur,f_l,-1);
+
+              Real *s1n = &(sfac1_y_(j,i,ifr*nang));
+              Real *s2n = &(sfac2_y_(j,i,ifr*nang));
+              Real *velyn = &(vely_(k,j,i,ifr*nang));
+              Real adv = adv_vel(1,k,j,i);
+              SignalSpeed(adv, f_l, f_r, velyn, s1n, s2n);
+            } // endif ifr
+          } // endif i
+        } // endif j
+
+        // reconstruction
+        if (order == 1) {
+          pmb->precon->DonorCellX2(k, js-1, is, ie, ir, m, il_, ir_);
+        } else if (order == 2) {
+          pmb->precon->PiecewiseLinearX2(k, js-1, is, ie, ir, m, il_, ir_);
+        } else {
+          pmb->precon->PiecewiseParabolicX2(k, js-1, is, ie, ir, m, il_, ir_);
+        }
+
+        for (int j=js; j<=je+1; ++j) {
+          if (order == 1) {
+            pmb->precon->DonorCellX2(k, j, is, ie, ir, m, ilb_, ir_);
+          } else if (order == 2) {
+            pmb->precon->PiecewiseLinearX2(k, j, is, ie, ir, m, ilb_, ir_);
+          } else {
+            pmb->precon->PiecewiseParabolicX2(k, j, is, ie, ir, m, ilb_, ir_);
+          }
+
+          for (int i=is; i<=ie; ++i) {
+            Real *vel = &(vely_(k,j,i,0));
+            Real *smax = &(sfac1_y_(j,i,0));
+            Real *smin = &(sfac2_y_(j,i,0));
+            Real *irln = &(il_(i,0));
+            Real *irrn = &(ir_(i,0));
+            Real adv = 0.0;
+            if (adv_flag_ > 0) {
+              adv = adv_vel(1,k,j,i);
+            }
+            Real *sm_diff = &(sm_diff1_(0));
+            for (int n=0; n<prad->n_fre_ang; ++n) {
+              Real diff = smax[n] - smin[n];
+              if (std::abs(diff) < TINY_NUMBER)
+                sm_diff[n] = 0.0;
+              else
+                sm_diff[n] = 1.0/diff;
+            }
+
+            for (int n=0; n<prad->n_fre_ang; ++n) {
+              Real vl = vel[n] - adv;
+              x2flux(m,k,j,i,n) = smax[n] * (vl - smin[n]) * irln[n] * sm_diff[n]
+                                + smin[n] * (smax[n] - vl) * irrn[n] * sm_diff[n];
+              // x2flux(k,j,i,n) = (smax[n] * vl * irln[n] - smin[n] * vl * irrn[n]
+              // + smax[n] * smin[n] * (irrn[n] - irln[n]))/(smax[n] - smin[n]);
+            }
+            if (adv_flag_ > 0) {
+              const Real &advv = adv_vel(1,k,j,i);
+              if (advv >0) {
+                for (int n=0; n<prad->n_fre_ang; ++n) {
+                  x2flux(m,k,j,i,n) += advv * irln[n];
+                }
+              } else {
+                for (int n=0; n<prad->n_fre_ang; ++n) {
+                  x2flux(m,k,j,i,n) += advv * irrn[n];
+                }
+              }
+            }
+          } // endif i
+          il_.SwapAthenaArray(ilb_);
+        }
+      } // endfor k
+    } // endfor m
+  } // endif pmb->pmy_mesh->f2
+
+  if (pmb->pmy_mesh->f3) {
+    AthenaArray<Real> &x3flux=prad->flux[X3DIR];
+    // First, calculate the transport velocity
+
+    for (int k=ks; k<=ke+1; ++k) {
+      for (int j=js; j<=je; ++j) {
+        pco->CenterWidth3(k-1,j,is,ie,dxw1_);
+        pco->CenterWidth3(k,j,is,ie,dxw2_);
+        for (int i=is; i<=ie; ++i) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            Real sigmal = prad->sigma_a(k-1,j,i,ifr) + prad->sigma_s(k-1,j,i,ifr);
+            Real sigmar = prad->sigma_a(k,j,i,ifr) + prad->sigma_s(k,j,i,ifr);
+            Real taul = dxw1_(i) * sigmal;
+            Real taur = dxw2_(i) * sigmar;
+
+            Real f_l = 1.0;
+            Real f_r = 1.0;
+            taul *= taufact(k-1,j,i);
+            taur *= taufact(k,j,i);
+            GetTaufactor(taul+taur,f_r,1);
+            GetTaufactor(taul+taur,f_l,-1);
+
+            Real *s1n = &(sfac1_z_(k,j,i,ifr*nang));
+            Real *s2n = &(sfac2_z_(k,j,i,ifr*nang));
+            Real *velzn = &(velz_(k,j,i,ifr*nang));
+            Real adv = adv_vel(2,k,j,i);
+            SignalSpeed(adv, f_l, f_r, velzn, s1n, s2n);
+          } // endfor ifr
+        } // endfor i
+      } // endfor j
+    } // endfor k
+
+    for (int m=0; m<nstok; ++m) {
+      for (int j=js; j<=je; ++j) { // this loop ordering is intentional
+        // reconstruct the first row
+        if (order == 1) {
+          pmb->precon->DonorCellX3(ks-1, j, is, ie, ir, m, il_, ir_);
+        } else if (order == 2) {
+          pmb->precon->PiecewiseLinearX3(ks-1, j, is, ie, ir, m, il_, ir_);
+        } else {
+          pmb->precon->PiecewiseParabolicX3(ks-1, j, is, ie, ir, m, il_, ir_);
+        }
+
+        for (int k=ks; k<=ke+1; ++k) {
+          // reconstruct L/R states at k
+          if (order == 1) {
+            pmb->precon->DonorCellX3(k, j, is, ie, ir, m, ilb_, ir_);
+          } else if (order == 2) {
+            pmb->precon->PiecewiseLinearX3(k, j, is, ie, ir, m, ilb_, ir_);
+          } else {
+            pmb->precon->PiecewiseParabolicX3(k, j, is, ie, ir, m, ilb_, ir_);
+          }
+
+          for (int i=is; i<=ie; ++i) {
+            Real *vel = &(velz_(k,j,i,0));
+            Real *smax = &(sfac1_z_(k,j,i,0));
+            Real *smin = &(sfac2_z_(k,j,i,0));
+            Real *irln = &(il_(i,0));
+            Real *irrn = &(ir_(i,0));
+            Real adv = 0.0;
+            if (adv_flag_ > 0) {
+              adv = adv_vel(2,k,j,i);
+            }
+            Real *sm_diff = &(sm_diff1_(0));
+            for (int n=0; n<prad->n_fre_ang; ++n) {
+              Real diff = smax[n] - smin[n];
+              if (std::abs(diff) < TINY_NUMBER)
+                sm_diff[n] = 0.0;
+              else
+                sm_diff[n] = 1.0/diff;
+            }
+            for (int n=0; n<prad->n_fre_ang; ++n) {
+              Real vl = vel[n] - adv;
+              x3flux(m,k,j,i,n) = smax[n] * (vl - smin[n]) * irln[n] * sm_diff[n]
+                                + smin[n] * (smax[n] - vl) * irrn[n] * sm_diff[n];
+              // x3flux(k,j,i,n) = (smax[n] * vl * irln[n] - smin[n] * vl * irrn[n]
+              // + smax[n] * smin[n] * (irrn[n] - irln[n]))/(smax[n] - smin[n]);
+            }// end n
+            if (adv_flag_ > 0) {
+              const Real &advv = adv_vel(2,k,j,i);
+              if (advv >0) {
+                for (int n=0; n<prad->n_fre_ang; ++n) {
+                  x3flux(m,k,j,i,n) += advv * irln[n];
+                }
+              } else {
+                for (int n=0; n<prad->n_fre_ang; ++n) {
+                  x3flux(m,k,j,i,n) += advv * irrn[n];
+                }
+              }
+            }
+          } // endfor i
+          // swap the arrays for the next step
+          il_.SwapAthenaArray(ilb_);
+        } // endfor k
+      } // endfor j
+    } // endfor m
+  } // endif pmb->pmy_mesh->f3
+
+}
+
+
 // calculate advective flux for the implicit scheme
 void RadIntegrator::CalculateFluxes(AthenaArray<Real> &ir, const int order) {
   NRRadiation *prad=pmy_rad;
@@ -686,7 +992,7 @@ void RadIntegrator::FluxDivergence(const Real wght) {
   }
 }
 
-
+// add flux divergence
 void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
                                    AthenaArray<Real> &ir_out) {
   NRRadiation *prad=pmy_rad;
@@ -838,4 +1144,79 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
       }
     }
   }
+}
+
+// add flux divergence in polarized RT
+void RadIntegrator::PolFluxDivergence(const Real wght, AthenaArray<Real> &ir_in, AthenaArray<Real> &ir_out) {
+  NRRadiation *prad=pmy_rad;
+  MeshBlock *pmb=prad->pmy_block;
+  int nfreq=prad->nfreq;
+  int nang=prad->nang;
+  int nstok=prad->num_stokes;
+
+  AthenaArray<Real> &x1flux=prad->flux[X1DIR];
+  AthenaArray<Real> &x2flux=prad->flux[X2DIR];
+  AthenaArray<Real> &x3flux=prad->flux[X3DIR];
+
+  int is = pmb->is; int js = pmb->js; int ks = pmb->ks;
+  int ie = pmb->ie; int je = pmb->je; int ke = pmb->ke;
+
+  AthenaArray<Real> &x1area = x1face_area_, &x2area = x2face_area_,
+                    &x2area_p1 = x2face_area_p1_, &x3area = x3face_area_,
+                    &x3area_p1 = x3face_area_p1_, &vol = cell_volume_, &dflx = dflx_;
+
+  for (int m=0; m<nstok; ++m) {
+    for (int k=ks; k<=ke; ++k) {
+      for (int j=js; j<=je; ++j) {
+        // calculate x1-flux divergence
+        pmb->pcoord->Face1Area(k,j,is,ie+1,x1area);
+        for (int i=is; i<=ie; ++i) {
+          Real *flxr = &(x1flux(m,k,j,i+1,0));
+          Real *flxl = &(x1flux(m,k,j,i,0));
+          Real *flxn = &(dflx(i,0));
+          for (int n=0; n<prad->n_fre_ang; ++n) {
+            flxn[n] = (x1area(i+1) *flxr[n] - x1area(i)*flxl[n]);
+          }
+        }
+
+        // calculate x2-flux
+        if (pmb->block_size.nx2 > 1) {
+          pmb->pcoord->Face2Area(k,j  ,is,ie,x2area   );
+          pmb->pcoord->Face2Area(k,j+1,is,ie,x2area_p1);
+          for (int i=is; i<=ie; ++i) {
+            Real *flxr = &(x2flux(m,k,j+1,i,0));
+            Real *flxl = &(x2flux(m,k,j,i,0));
+            Real *flxn = &(dflx(i,0));
+            for (int n=0; n<prad->n_fre_ang; ++n) {
+              flxn[n] += (x2area_p1(i)*flxr[n] - x2area(i)*flxl[n]);
+            }
+          }
+        }
+
+        // calculate x3-flux divergence
+        if (pmb->block_size.nx3 > 1) {
+          pmb->pcoord->Face3Area(k  ,j,is,ie,x3area   );
+          pmb->pcoord->Face3Area(k+1,j,is,ie,x3area_p1);
+          for (int i=is; i<=ie; ++i) {
+            Real *flxr = &(x3flux(m,k+1,j,i,0));
+            Real *flxl = &(x3flux(m,k,j,i,0));
+            Real *flxn = &(dflx(i,0));
+            for (int n=0; n<prad->n_fre_ang; ++n) {
+              flxn[n] += (x3area_p1(i)*flxr[n] - x3area(i)*flxl[n]);
+            }
+          }
+        }
+        // update variable with flux divergence
+        pmb->pcoord->CellVolume(k,j,is,ie,vol);
+        for (int i=is; i<=ie; ++i) {
+          Real *irin = &(ir_in(k,j,i,m,0));
+          Real *iro = &(ir_out(k,j,i,m,0));
+          Real *flxn = &(dflx(i,0));
+          for (int n=0; n<prad->n_fre_ang; ++n) {
+            iro[n] = std::max(irin[n]-wght*flxn[n]/vol(i), static_cast<Real>(TINY_NUMBER));
+          } // endfor n
+        } // endfor i
+      } // endfor j
+    } // endfor k
+  } // endfor m
 }

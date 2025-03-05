@@ -167,6 +167,9 @@ CellCenteredBoundaryVariable::CellCenteredBoundaryVariable(
     ATHENA_ERROR(msg);
   }
 
+  use_pol_rad = false; 
+  if (var->GetDim2() == 4) use_pol_rad = true; // modifications for polarization
+
   // KT: fflux is a flag and it is true (false) when flux correction is (not) needed.
   //     I have not implemented it for shearing box, leaving it to Tomohiro.
 
@@ -257,6 +260,9 @@ int CellCenteredBoundaryVariable::ComputeVariableBufferSize(const NeighborIndexe
     size = std::max(size, c2f);
     size = std::max(size, f2c);
   }
+
+  if (use_pol_rad) size *= 4;
+
   size *= nu_ + 1;
   return size;
 }
@@ -276,7 +282,9 @@ int CellCenteredBoundaryVariable::ComputeFluxCorrectionBufferSize(
     if (ni.ox3 != 0)
       size2 = (pmb->block_size.nx1 + 1)/2*(pmb->block_size.nx2 + 1)/2*(nu_ + 1);
   }
-  return std::max(size1,size2);
+  int size = std::max(size1,size2);
+  if (use_pol_rad) size *= 4;
+  return size;
 }
 
 //----------------------------------------------------------------------------------------

@@ -157,6 +157,16 @@ class NRRadiation {
 
   AthenaArray<Real> t_floor_, t_ceiling_; // temperature floor
 
+  /***** modifications for polarization *****/
+  const int num_stokes=4;
+  const int num_moments_per_stok = 13;
+  const int num_spec_moments_in_tot = 4;
+  bool use_pol_rad;
+  AthenaArray<Real> rad_pol_mom, rad_full_mom_cm, rad_spec_mom_cm;
+  void CalculateFullMoment(AthenaArray<Real> &ir_in);
+  void CalculateFullComMoment();
+  /***** modifications for polarization *****/
+
  private:
   int user_unit_;
   // temporary arrays for co-moving moments

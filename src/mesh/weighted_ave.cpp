@@ -346,6 +346,127 @@ void MeshBlock::WeightedAve(AthenaArray<Real> &u_out, AthenaArray<Real> &u_in1,
         }
       }
     }
+  } else if (flag == 2) { // modifications for polarization
+    const int nstok = u_out.GetDim2() - 1;
+    const int nu = u_out.GetDim1() - 1;
+    // u_in2 may be an unallocated AthenaArray if using a 2S time integrator
+    if (wght[0] == 1.0) {
+      if (wght[2] != 0.0) {
+        for (int k=ks; k<=ke; ++k) {
+          for (int j=js; j<=je; ++j) {
+            for (int i=is; i<=ie; ++i) {
+              for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                for (int n=0; n<=nu; ++n) {
+                  u_out(k,j,i,m,n) += wght[1]*u_in1(k,j,i,m,n) + wght[2]*u_in2(k,j,i,m,n);
+                } // endfor n
+              } // endfor m
+            } // endfor i
+          } // endfor j
+        } // endfor k
+      } else { // do not dereference u_in2
+        if (wght[1] != 0.0) {
+          for (int k=ks; k<=ke; ++k) {
+            for (int j=js; j<=je; ++j) {
+              for (int i=is; i<=ie; ++i) {
+                for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                  for (int n=0; n<=nu; ++n) {
+                    u_out(k,j,i,m,n) += wght[1]*u_in1(k,j,i,m,n);
+                  } // endfor n
+                } // endfor m
+              } // endfor i
+            } // endfor j
+          } // endfor k
+        } // endif wght[1] != 0.0
+      } // endelse wght[2] != 0.0
+    } else if (wght[0] == 0.0) {
+      if (wght[2] != 0.0) {
+        for (int k=ks; k<=ke; ++k) {
+          for (int j=js; j<=je; ++j) {
+            for (int i=is; i<=ie; ++i) {
+              for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                for (int n=0; n<=nu; ++n) {
+                  u_out(k,j,i,m,n) = wght[1]*u_in1(k,j,i,m,n) + wght[2]*u_in2(k,j,i,m,n);
+                }
+              }
+            }
+          }
+        }
+      } else if (wght[1] == 1.0) {
+        // just deep copy
+        for (int k=ks; k<=ke; ++k) {
+          for (int j=js; j<=je; ++j) {
+            for (int i=is; i<=ie; ++i) {
+              for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                for (int n=0; n<=nu; ++n) {
+                  u_out(k,j,i,m,n) = u_in1(k,j,i,m,n);
+                }
+              }
+            }
+          }
+        }
+      } else {
+        for (int k=ks; k<=ke; ++k) {
+          for (int j=js; j<=je; ++j) {
+            for (int i=is; i<=ie; ++i) {
+              for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                for (int n=0; n<=nu; ++n) {
+                  u_out(k,j,i,m,n) = wght[1]*u_in1(k,j,i,m,n);
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      if (wght[2] != 0.0) {
+        for (int k=ks; k<=ke; ++k) {
+          for (int j=js; j<=je; ++j) {
+            for (int i=is; i<=ie; ++i) {
+              for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                for (int n=0; n<=nu; ++n) {
+                  u_out(k,j,i,m,n) = wght[0]*u_out(k,j,i,m,n) + wght[1]*u_in1(k,j,i,m,n) + wght[2]*u_in2(k,j,i,m,n);
+                }
+              }
+            }
+          }
+        }
+      } else { // do not dereference u_in2
+        if (wght[1] != 0.0) {
+          for (int k=ks; k<=ke; ++k) {
+            for (int j=js; j<=je; ++j) {
+              for (int i=is; i<=ie; ++i) {
+                for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                  for (int n=0; n<=nu; ++n) {
+                    u_out(k,j,i,m,n) = wght[0]*u_out(k,j,i,m,n) + wght[1]*u_in1(k,j,i,m,n);
+                  }
+                }
+              }
+            }
+          }
+        } else { // do not dereference u_in1
+          for (int k=ks; k<=ke; ++k) {
+            for (int j=js; j<=je; ++j) {
+              for (int i=is; i<=ie; ++i) {
+                for (int m=0; m<nstok; ++m) {
+#pragma omp simd
+                  for (int n=0; n<=nu; ++n) {
+                    u_out(k,j,i,m,n) *= wght[0];
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
   } else {
       std::stringstream msg;
       msg << "### FATAL ERROR in MeshBlock::WeightedAve" << std::endl

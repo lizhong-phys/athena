@@ -113,7 +113,12 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
             pnrrad->sigma_p(k,j,i,ifr) = 0.0;
           }
           for (int n=0; n<pnrrad->n_fre_ang; ++n) {
-              pnrrad->ir(k,j,i,n) = 0.0;
+            if (pnrrad->use_pol_rad) {
+              pnrrad->ir(k,j,i,0,n) = 0.0;
+              pnrrad->ir(k,j,i,1,n) = 0.0;
+              pnrrad->ir(k,j,i,2,n) = 0.0;
+              pnrrad->ir(k,j,i,3,n) = 0.0;
+            } else pnrrad->ir(k,j,i,n) = 0.0;
           }
         }
       }
@@ -127,6 +132,7 @@ void TwoBeams(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
               AthenaArray<Real> &ir,
               Real time, Real dt,
               int is, int ie, int js, int je, int ks, int ke, int ngh) {
+  bool use_pol_rad_ = prad->use_pol_rad;
   int nang=prad->nang;
   int noct=prad->noct;
   int nfreq=prad->nfreq;
@@ -149,16 +155,36 @@ void TwoBeams(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
               if (ifr == 0) {
                 if (((l==0)&&(n==0)&&(dis1<pco->dx1v(i))) ||
                     ((l==1)&&(n==0)&&(dis2<pco->dx1v(i)))) {
-                  ir(k,js-j,i,n_ang+ifr*nang) = 10.0;
+                  if (use_pol_rad_) {
+                    ir(k,js-j,i,0,n_ang+ifr*nang) = 10.0;
+                    ir(k,js-j,i,1,n_ang+ifr*nang) = 10.0;
+                    ir(k,js-j,i,2,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,3,n_ang+ifr*nang) = 0.0;
+                  } else ir(k,js-j,i,n_ang+ifr*nang) = 10.0;
                 } else {
-                  ir(k,js-j,i,n_ang+ifr*nang) = 0.0;
+                  if (use_pol_rad_) {
+                    ir(k,js-j,i,0,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,1,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,2,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,3,n_ang+ifr*nang) = 0.0;
+                  } else ir(k,js-j,i,n_ang+ifr*nang) = 0.0;
                 }
               } else {
                 if (((l==0)&&(n==1)&&(dis1<pco->dx1v(i))) ||
                     ((l==1)&&(n==1)&&(dis2<pco->dx1v(i)))) {
-                  ir(k,js-j,i,n_ang+ifr*nang) = 10.0;
+                  if (use_pol_rad_) {
+                    ir(k,js-j,i,0,n_ang+ifr*nang) = 10.0;
+                    ir(k,js-j,i,1,n_ang+ifr*nang) = 10.0;
+                    ir(k,js-j,i,2,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,3,n_ang+ifr*nang) = 0.0;
+                  } else ir(k,js-j,i,n_ang+ifr*nang) = 10.0;
                 } else {
-                  ir(k,js-j,i,n_ang+ifr*nang) = 0.0;
+                  if (use_pol_rad_) {
+                    ir(k,js-j,i,0,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,1,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,2,n_ang+ifr*nang) = 0.0;
+                    ir(k,js-j,i,3,n_ang+ifr*nang) = 0.0;
+                  } else ir(k,js-j,i,n_ang+ifr*nang) = 0.0;
                 }
               }
             }

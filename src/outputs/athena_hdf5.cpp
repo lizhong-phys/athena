@@ -140,8 +140,12 @@ void ATHDF5Output::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool flag) {
       if (pmb->pgrav->output_defect)
         num_variables[n_dataset] += 1;
     }
-    if(NR_RADIATION_ENABLED || IM_RADIATION_ENABLED)
-      num_variables[n_dataset] += 20 *pmb->pnrrad->nfreq;
+    if(NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) {
+      num_variables[n_dataset] += 20 * pmb->pnrrad->nfreq;
+      if (pmb->pnrrad->use_pol_rad) {
+        num_variables[n_dataset] += 1;        
+      }
+    }
 
     if(CR_ENABLED)
       num_variables[n_dataset] += 13;
