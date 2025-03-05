@@ -37,26 +37,44 @@ void RadBoundaryVariable::VacuumInnerX1(Real time, Real dt, int il, int jl, int 
   // copy radiation variables into ghost zones,
   // reflect rays along angles with opposite nx
   MeshBlock *pmb=pmy_block_;
-  const int& nang = pmb->pnrrad->nang; // angles per octant
-  const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+  NRRadiation *prad = pmb->pnrrad;
+  const int& nang = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
       for (int i=1; i<=ngh; ++i) {
-        for (int ifr=0; ifr<nfreq; ++ifr) {
-          for(int n=0; n<nang; ++n) {
-            int ang=ifr*nang+n;
-            const Real& miux=pmb->pnrrad->mu(0,k,j,il,n);
-            if (miux < 0.0) {
-              (*var_cc)(k,j,il-i,ang) = (*var_cc)(k,j,il,ang);
-            } else {
-              (*var_cc)(k,j,il-i,ang) = 0.0;
-            }
-          }
-        }
-      }
-    }
-  }
+        if (!prad->use_pol_rad) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            for(int n=0; n<nang; ++n) {
+              int ang=ifr*nang+n;
+              const Real& miux=prad->mu(0,k,j,il,n);
+              if (miux < 0.0) {
+                (*var_cc)(k,j,il-i,ang) = (*var_cc)(k,j,il,ang);
+              } else {
+                (*var_cc)(k,j,il-i,ang) = 0.0;
+              }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for(int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                const Real& miux=prad->mu(0,k,j,il,n);
+                if (miux < 0.0) {
+                  (*var_cc)(k,j,il-i,m,ang) = (*var_cc)(k,j,il,m,ang);
+                } else {
+                  (*var_cc)(k,j,il-i,m,ang) = 0.0;
+                }
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
   return;
 }
 
@@ -71,26 +89,45 @@ void RadBoundaryVariable::VacuumOuterX1(
   // copy radiation variables into ghost zones,
   // reflect rays along angles with opposite nx
   MeshBlock *pmb=pmy_block_;
-  const int& nang = pmb->pnrrad->nang; // angles per octant
-  const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+  NRRadiation *prad = pmb->pnrrad;
+  const int& nang = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
   for (int k=kl; k<=ku; ++k) {
     for (int j=jl; j<=ju; ++j) {
       for (int i=1; i<=ngh; ++i) {
-        for (int ifr=0; ifr<nfreq; ++ifr) {
-          for(int n=0; n<nang; ++n) {
-            int ang=ifr*nang+n;
-            const Real& miux=pmb->pnrrad->mu(0,k,j,iu,n);
-            if (miux > 0.0) {
-              (*var_cc)(k,j,iu+i,ang) = (*var_cc)(k,j,iu,ang);
-            } else {
-              (*var_cc)(k,j,iu+i,ang) = 0.0;
-            }
-          }
-        }
-      }
-    }
-  }
+        if (!prad->use_pol_rad) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            for(int n=0; n<nang; ++n) {
+              int ang=ifr*nang+n;
+              const Real& miux=prad->mu(0,k,j,iu,n);
+              if (miux > 0.0) {
+                (*var_cc)(k,j,iu+i,ang) = (*var_cc)(k,j,iu,ang);
+              } else {
+                (*var_cc)(k,j,iu+i,ang) = 0.0;
+              }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for(int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                const Real& miux=prad->mu(0,k,j,iu,n);
+                if (miux > 0.0) {
+                  (*var_cc)(k,j,iu+i,m,ang) = (*var_cc)(k,j,iu,m,ang);
+                } else {
+                  (*var_cc)(k,j,iu+i,m,ang) = 0.0;
+                }
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
+
   return;
 }
 
@@ -108,26 +145,45 @@ void RadBoundaryVariable::VacuumInnerX2(
   // copy radiation variables into ghost zones,
   // reflect rays along angles with opposite nx
   MeshBlock *pmb=pmy_block_;
-  const int& nang = pmb->pnrrad->nang; // angles per octant
-  const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+  NRRadiation *prad = pmb->pnrrad;
+  const int& nang = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
   for (int k=kl; k<=ku; ++k) {
     for (int j=1; j<=ngh; ++j) {
       for (int i=il; i<=iu; ++i) {
-        for (int ifr=0; ifr<nfreq; ++ifr) {
-          for(int n=0; n<nang; ++n) {
-            int ang=ifr*nang+n;
-            const Real& miuy=pmb->pnrrad->mu(1,k,jl,i,n);
-            if (miuy < 0.0) {
-              (*var_cc)(k,jl-j,i,ang) = (*var_cc)(k,jl,i,ang);
-            } else {
-              (*var_cc)(k,jl-j,i,ang) = 0.0;
-            }
-          }
-        }
-      }
-    }
-  }
+        if (!prad->use_pol_rad) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            for(int n=0; n<nang; ++n) {
+              int ang=ifr*nang+n;
+              const Real& miuy=prad->mu(1,k,jl,i,n);
+              if (miuy < 0.0) {
+                (*var_cc)(k,jl-j,i,ang) = (*var_cc)(k,jl,i,ang);
+              } else {
+                (*var_cc)(k,jl-j,i,ang) = 0.0;
+              }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for(int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                const Real& miuy=prad->mu(1,k,jl,i,n);
+                if (miuy < 0.0) {
+                  (*var_cc)(k,jl-j,i,m,ang) = (*var_cc)(k,jl,i,m,ang);
+                } else {
+                  (*var_cc)(k,jl-j,i,m,ang) = 0.0;
+                }
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
+
   return;
 }
 
@@ -142,26 +198,45 @@ void RadBoundaryVariable::VacuumOuterX2(
   // copy radiation variables into ghost zones,
   // reflect rays along angles with opposite nx
   MeshBlock *pmb=pmy_block_;
-  const int& nang = pmb->pnrrad->nang; // angles per octant
-  const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+  NRRadiation *prad = pmb->pnrrad;
+  const int& nang = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
   for (int k=kl; k<=ku; ++k) {
     for (int j=1; j<=ngh; ++j) {
       for (int i=il; i<=iu; ++i) {
-        for (int ifr=0; ifr<nfreq; ++ifr) {
-          for(int n=0; n<nang; ++n) {
-            int ang=ifr*nang+n;
-            const Real& miuy=pmb->pnrrad->mu(1,k,ju,i,n);
-            if (miuy > 0.0) {
-              (*var_cc)(k,ju+j,i,ang) = (*var_cc)(k,ju,i,ang);
-            } else {
-              (*var_cc)(k,ju+j,i,ang) = 0.0;
-            }
-          }
-        }
-      }
-    }
-  }
+        if (!prad->use_pol_rad) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            for(int n=0; n<nang; ++n) {
+              int ang=ifr*nang+n;
+              const Real& miuy=prad->mu(1,k,ju,i,n);
+              if (miuy > 0.0) {
+                (*var_cc)(k,ju+j,i,ang) = (*var_cc)(k,ju,i,ang);
+              } else {
+                (*var_cc)(k,ju+j,i,ang) = 0.0;
+              }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for(int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                const Real& miuy=prad->mu(1,k,ju,i,n);
+                if (miuy > 0.0) {
+                  (*var_cc)(k,ju+j,i,m,ang) = (*var_cc)(k,ju,i,m,ang);
+                } else {
+                  (*var_cc)(k,ju+j,i,m,ang) = 0.0;
+                }
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
+
   return;
 }
 
@@ -181,26 +256,45 @@ void RadBoundaryVariable::VacuumInnerX3(
   // copy radiation variables into ghost zones,
   // reflect rays along angles with opposite nx
   MeshBlock *pmb=pmy_block_;
-  const int& nang = pmb->pnrrad->nang; // angles per octant
-  const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+  NRRadiation *prad = pmb->pnrrad;
+  const int& nang = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
   for (int k=1; k<=ngh; ++k) {
     for (int j=jl; j<=ju; ++j) {
       for (int i=il; i<=iu; ++i) {
-        for (int ifr=0; ifr<nfreq; ++ifr) {
-          for(int n=0; n<nang; ++n) {
-            int ang=ifr*nang+n;
-            const Real& miuz=pmb->pnrrad->mu(2,kl,j,i,n);
-            if (miuz < 0.0) {
-              (*var_cc)(kl-k,j,i,ang) = (*var_cc)(kl,j,i,ang);
-            } else {
-              (*var_cc)(kl-k,j,i,ang) = 0.0;
-            }
-          }
-        }
-      }
-    }
-  }
+        if (!prad->use_pol_rad) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            for(int n=0; n<nang; ++n) {
+              int ang=ifr*nang+n;
+              const Real& miuz=prad->mu(2,kl,j,i,n);
+              if (miuz < 0.0) {
+                (*var_cc)(kl-k,j,i,ang) = (*var_cc)(kl,j,i,ang);
+              } else {
+                (*var_cc)(kl-k,j,i,ang) = 0.0;
+              }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for(int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                const Real& miuz=prad->mu(2,kl,j,i,n);
+                if (miuz < 0.0) {
+                  (*var_cc)(kl-k,j,i,m,ang) = (*var_cc)(kl,j,i,m,ang);
+                } else {
+                  (*var_cc)(kl-k,j,i,m,ang) = 0.0;
+                }
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
+
   return;
 }
 
@@ -216,25 +310,43 @@ void RadBoundaryVariable::VacuumOuterX3(
   // copy radiation variables into ghost zones,
   // reflect rays along angles with opposite nx
   MeshBlock *pmb=pmy_block_;
-  const int& nang = pmb->pnrrad->nang; // angles per octant
-  const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+  NRRadiation *prad = pmb->pnrrad;
+  const int& nang = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
   for (int k=1; k<=ngh; ++k) {
     for (int j=jl; j<=ju; ++j) {
       for (int i=il; i<=iu; ++i) {
-        for (int ifr=0; ifr<nfreq; ++ifr) {
-          for(int n=0; n<nang; ++n) {
-            int ang=ifr*nang+n;
-            const Real& miuz=pmb->pnrrad->mu(2,ku,j,i,n);
-            if (miuz > 0.0) {
-              (*var_cc)(ku+k,j,i,ang) = (*var_cc)(ku,j,i,ang);
-            } else {
-              (*var_cc)(ku+k,j,i,ang) = 0.0;
-            }
-          }
-        }
-      }
-    }
-  }
+        if (!prad->use_pol_rad) {
+          for (int ifr=0; ifr<nfreq; ++ifr) {
+            for(int n=0; n<nang; ++n) {
+              int ang=ifr*nang+n;
+              const Real& miuz=prad->mu(2,ku,j,i,n);
+              if (miuz > 0.0) {
+                (*var_cc)(ku+k,j,i,ang) = (*var_cc)(ku,j,i,ang);
+              } else {
+                (*var_cc)(ku+k,j,i,ang) = 0.0;
+              }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for(int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                const Real& miuz=prad->mu(2,ku,j,i,n);
+                if (miuz > 0.0) {
+                  (*var_cc)(ku+k,j,i,m,ang) = (*var_cc)(ku,j,i,m,ang);
+                } else {
+                  (*var_cc)(ku+k,j,i,m,ang) = 0.0;
+                }
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
   return;
 }

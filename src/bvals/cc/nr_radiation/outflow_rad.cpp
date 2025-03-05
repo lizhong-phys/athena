@@ -36,39 +36,34 @@
 void RadBoundaryVariable::OutflowInnerX1(Real time, Real dt, int il, int jl, int ju,
                                          int kl, int ku, int ngh) {
   // copy radiation variables into ghost zones,
-  const int& nang = pmy_block_->pnrrad->nang; // angles per octant
-  const int& nfreq = pmy_block_->pnrrad->nfreq; // number of frequency bands
-  const int& nstok = pmy_block_->pnrrad->num_stokes;
+  NRRadiation *prad = pmy_block_->pnrrad;
+  const int& nang  = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
-  if (pmy_block_->pnrrad->use_pol_rad) { // modifications for polarization
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
-          for (int ifr=0; ifr<nfreq; ++ifr) {
-            for (int m=0; m<nstok; ++m) {
-              for (int n=0; n<nang; ++n) {
-                int ang=ifr*nang+n;
-                (*var_cc)(k,j,il-i,m,ang) = (*var_cc)(k,j,il,m,ang);
-              }
-            }
-          }
-        }
-      }
-    } // endfor k
-  } else {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
+  for (int k=kl; k<=ku; ++k) {
+    for (int j=jl; j<=ju; ++j) {
+      for (int i=1; i<=ngh; ++i) {
+        if (!prad->use_pol_rad) {
           for (int ifr=0; ifr<nfreq; ++ifr) {
             for (int n=0; n<nang; ++n) {
               int ang=ifr*nang+n;
               (*var_cc)(k,j,il-i,ang) = (*var_cc)(k,j,il,ang);
-            }
-          }
-        }
-      }
-    } // endfor k
-  }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for (int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                (*var_cc)(k,j,il-i,m,ang) = (*var_cc)(k,j,il,m,ang);
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
   return;
 }
@@ -81,39 +76,34 @@ void RadBoundaryVariable::OutflowInnerX1(Real time, Real dt, int il, int jl, int
 void RadBoundaryVariable::OutflowOuterX1(Real time, Real dt, int iu, int jl, int ju,
                                          int kl, int ku, int ngh) {
   // copy radiation variables into ghost zones,
-  const int& nang = pmy_block_->pnrrad->nang; // angles per octant
-  const int& nfreq = pmy_block_->pnrrad->nfreq; // number of frequency bands
-  const int& nstok = pmy_block_->pnrrad->num_stokes;
+  NRRadiation *prad = pmy_block_->pnrrad;
+  const int& nang  = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
-  if (pmy_block_->pnrrad->use_pol_rad) { // modifications for polarization
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
-          for (int ifr=0; ifr<nfreq; ++ifr) {
-            for (int m=0; m<nstok; ++m) {
-              for (int n=0; n<nang; ++n) {
-                int ang=ifr*nang+n;
-                (*var_cc)(k,j,iu+i,m,ang) = (*var_cc)(k,j,iu,m,ang);
-              }
-            }
-          }
-        }
-      }
-    } // endfor k
-  } else {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
+  for (int k=kl; k<=ku; ++k) {
+    for (int j=jl; j<=ju; ++j) {
+      for (int i=1; i<=ngh; ++i) {
+        if (!prad->use_pol_rad) {
           for (int ifr=0; ifr<nfreq; ++ifr) {
             for (int n=0; n<nang; ++n) {
               int ang=ifr*nang+n;
               (*var_cc)(k,j,iu+i,ang) = (*var_cc)(k,j,iu,ang);
-            }
-          }
-        }
-      }
-    } // endfor k
-  }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for (int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                (*var_cc)(k,j,iu+i,m,ang) = (*var_cc)(k,j,iu,m,ang);
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
   return;
 }
@@ -126,39 +116,34 @@ void RadBoundaryVariable::OutflowOuterX1(Real time, Real dt, int iu, int jl, int
 void RadBoundaryVariable::OutflowInnerX2(Real time, Real dt, int il, int iu, int jl,
                                          int kl, int ku, int ngh) {
   // copy radiation variables into ghost zones,
-  int nang = pmy_block_->pnrrad->nang;
-  const int& nfreq = pmy_block_->pnrrad->nfreq; // number of frequency bands
-  const int& nstok = pmy_block_->pnrrad->num_stokes;
+  NRRadiation *prad = pmy_block_->pnrrad;
+  int nang = prad->nang;
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
-  if (pmy_block_->pnrrad->use_pol_rad) { // modifications for polarization
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=1; j<=ngh; ++j) {
-        for (int i=il; i<=iu; ++i) {
-          for (int ifr=0; ifr<nfreq; ++ifr) {
-            for (int m=0; m<nstok; ++m) {
-              for (int n=0; n<nang; ++n) {
-                int ang=ifr*nang+n;
-                (*var_cc)(k,jl-j,i,m,ang) = (*var_cc)(k,jl,i,m,ang);
-              }
-            }
-          }
-        }
-      }
-    } // endfor k
-  } else {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=1; j<=ngh; ++j) {
-        for (int i=il; i<=iu; ++i) {
+  for (int k=kl; k<=ku; ++k) {
+    for (int j=1; j<=ngh; ++j) {
+      for (int i=il; i<=iu; ++i) {
+        if (!prad->use_pol_rad) {
           for (int ifr=0; ifr<nfreq; ++ifr) {
             for (int n=0; n<nang; ++n) {
               int ang=ifr*nang+n;
               (*var_cc)(k,jl-j,i,ang) = (*var_cc)(k,jl,i,ang);
-            }
-          }
-        }
-      }
-    } // endfor k
-  }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for (int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                (*var_cc)(k,jl-j,i,m,ang) = (*var_cc)(k,jl,i,m,ang);
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
   return;
 }
@@ -171,39 +156,34 @@ void RadBoundaryVariable::OutflowInnerX2(Real time, Real dt, int il, int iu, int
 void RadBoundaryVariable::OutflowOuterX2(Real time, Real dt, int il, int iu, int ju,
                                          int kl, int ku, int ngh) {
   // copy radiation variables into ghost zones,
-  const int& nang = pmy_block_->pnrrad->nang; // angles per octant
-  const int& nfreq = pmy_block_->pnrrad->nfreq; // number of frequency bands
-  const int& nstok = pmy_block_->pnrrad->num_stokes;
+  NRRadiation *prad = pmy_block_->pnrrad;
+  const int& nang  = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
-  if (pmy_block_->pnrrad->use_pol_rad) { // modifications for polarization
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=1; j<=ngh; ++j) {
-        for (int i=il; i<=iu; ++i) {
-          for (int ifr=0; ifr<nfreq; ++ifr) {
-            for (int m=0; m<nstok; ++m) {
-              for(int n=0; n<nang; ++n) {
-                int ang=ifr*nang+n;
-                (*var_cc)(k,ju+j,i,m,ang) = (*var_cc)(k,ju,i,m,ang);
-              }
-            }
-          }
-        }
-      }
-    } // endfor k
-  } else {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=1; j<=ngh; ++j) {
-        for (int i=il; i<=iu; ++i) {
+  for (int k=kl; k<=ku; ++k) {
+    for (int j=1; j<=ngh; ++j) {
+      for (int i=il; i<=iu; ++i) {
+        if (!prad->use_pol_rad) {
           for (int ifr=0; ifr<nfreq; ++ifr) {
             for(int n=0; n<nang; ++n) {
               int ang=ifr*nang+n;
               (*var_cc)(k,ju+j,i,ang) = (*var_cc)(k,ju,i,ang);
-            }
-          }
-        }
-      }
-    } // endfor k
-  }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for(int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                (*var_cc)(k,ju+j,i,m,ang) = (*var_cc)(k,ju,i,m,ang);
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
   return;
 }
@@ -216,40 +196,34 @@ void RadBoundaryVariable::OutflowOuterX2(Real time, Real dt, int il, int iu, int
 void RadBoundaryVariable::OutflowInnerX3(Real time, Real dt, int il, int iu, int jl,
                                          int ju, int kl, int ngh) {
   // copy radiation variables into ghost zones,
+  NRRadiation *prad = pmy_block_->pnrrad;
+  const int& nang  = prad->nang;
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
-  const int& nang = pmy_block_->pnrrad->nang;
-  const int& nfreq = pmy_block_->pnrrad->nfreq; // number of frequency bands
-  const int& nstok = pmy_block_->pnrrad->num_stokes;
-
-  if (pmy_block_->pnrrad->use_pol_rad) { // modifications for polarization
-    for (int k=1; k<=ngh; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=il; i<=iu; ++i) {
-          for (int ifr=0; ifr<nfreq; ++ifr) {
-            for (int m=0; m<nstok; ++m) {
-              for (int n=0; n<nang; ++n) {
-                int ang=ifr*nang+n;
-                (*var_cc)(kl-k,j,i,m,ang) = (*var_cc)(kl,j,i,m,ang);
-              }
-            }
-          }
-        }
-      }
-    } // endfor k
-  } else {
-    for (int k=1; k<=ngh; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=il; i<=iu; ++i) {
+  for (int k=1; k<=ngh; ++k) {
+    for (int j=jl; j<=ju; ++j) {
+      for (int i=il; i<=iu; ++i) {
+        if (!prad->use_pol_rad) {
           for (int ifr=0; ifr<nfreq; ++ifr) {
             for (int n=0; n<nang; ++n) {
               int ang=ifr*nang+n;
               (*var_cc)(kl-k,j,i,ang) = (*var_cc)(kl,j,i,ang);
-            }
-          }
-        }
-      }
-    } // endfor k
-  }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for (int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                (*var_cc)(kl-k,j,i,m,ang) = (*var_cc)(kl,j,i,m,ang);
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
   return;
 }
@@ -262,40 +236,34 @@ void RadBoundaryVariable::OutflowInnerX3(Real time, Real dt, int il, int iu, int
 void RadBoundaryVariable::OutflowOuterX3(Real time, Real dt, int il, int iu, int jl,
                                          int ju, int ku, int ngh) {
   // copy radiation variables into ghost zones,
+  NRRadiation *prad = pmy_block_->pnrrad;
+  const int& nang  = prad->nang; // angles per octant
+  const int& nfreq = prad->nfreq; // number of frequency bands
+  const int& nstok = prad->num_stokes; // number of stokes parameters
 
-  const int& nang = pmy_block_->pnrrad->nang; // angles per octant
-  const int& nfreq = pmy_block_->pnrrad->nfreq; // number of frequency bands
-  const int& nstok = pmy_block_->pnrrad->num_stokes;
-
-  if (pmy_block_->pnrrad->use_pol_rad) { // modifications for polarization
-    for (int k=1; k<=ngh; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=il; i<=iu; ++i) {
-          for (int ifr=0; ifr<nfreq; ++ifr) {
-            for (int m=0; m<nstok; ++m) {
-              for (int n=0; n<nang; ++n) {
-                int ang=ifr*nang+n;
-                (*var_cc)(ku+k,j,i,m,ang) = (*var_cc)(ku,j,i,m,ang);
-              }
-            }
-          }
-        }
-      }
-    } // endfor k
-  } else {
-    for (int k=1; k<=ngh; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=il; i<=iu; ++i) {
+  for (int k=1; k<=ngh; ++k) {
+    for (int j=jl; j<=ju; ++j) {
+      for (int i=il; i<=iu; ++i) {
+        if (!prad->use_pol_rad) {
           for (int ifr=0; ifr<nfreq; ++ifr) {
             for (int n=0; n<nang; ++n) {
               int ang=ifr*nang+n;
               (*var_cc)(ku+k,j,i,ang) = (*var_cc)(ku,j,i,ang);
-            }
-          }
-        }
-      }
-    } // endfor k
-  }
+            } // endfor n
+          } // endfor ifr
+        } else { // modifications for polarization
+          for (int m=0; m<nstok; ++m) {
+            for (int ifr=0; ifr<nfreq; ++ifr) {
+              for (int n=0; n<nang; ++n) {
+                int ang=ifr*nang+n;
+                (*var_cc)(ku+k,j,i,m,ang) = (*var_cc)(ku,j,i,m,ang);
+              } // endfor n
+            } // endfor ifr
+          } // endfor m
+        } // endelse !prad->use_pol_rad
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
   return;
 }
