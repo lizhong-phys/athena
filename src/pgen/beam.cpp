@@ -157,9 +157,9 @@ void TwoBeams(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
                     ((l==1)&&(n==0)&&(dis2<pco->dx1v(i)))) {
                   if (use_pol_rad_) {
                     ir(k,js-j,i,0,n_ang+ifr*nang) = 10.0;
-                    ir(k,js-j,i,1,n_ang+ifr*nang) = 10.0;
-                    ir(k,js-j,i,2,n_ang+ifr*nang) = 10.0;
-                    ir(k,js-j,i,3,n_ang+ifr*nang) = 10.0;
+                    ir(k,js-j,i,1,n_ang+ifr*nang) = 1.0;
+                    ir(k,js-j,i,2,n_ang+ifr*nang) = 0.1;
+                    ir(k,js-j,i,3,n_ang+ifr*nang) = 0.01;
                   } else ir(k,js-j,i,n_ang+ifr*nang) = 10.0;
                 } else {
                   if (use_pol_rad_) {
@@ -174,9 +174,9 @@ void TwoBeams(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
                     ((l==1)&&(n==1)&&(dis2<pco->dx1v(i)))) {
                   if (use_pol_rad_) {
                     ir(k,js-j,i,0,n_ang+ifr*nang) = 10.0;
-                    ir(k,js-j,i,1,n_ang+ifr*nang) = 10.0;
-                    ir(k,js-j,i,2,n_ang+ifr*nang) = 10.0;
-                    ir(k,js-j,i,3,n_ang+ifr*nang) = 10.0;
+                    ir(k,js-j,i,1,n_ang+ifr*nang) = 1.0;
+                    ir(k,js-j,i,2,n_ang+ifr*nang) = 0.1;
+                    ir(k,js-j,i,3,n_ang+ifr*nang) = 0.01;
                   } else ir(k,js-j,i,n_ang+ifr*nang) = 10.0;
                 } else {
                   if (use_pol_rad_) {

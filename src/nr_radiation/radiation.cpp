@@ -299,8 +299,8 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
     if (pmb->pmy_mesh->multilevel) coarse_ir_.NewAthenaArray(pmb->ncc3, pmb->ncc2, pmb->ncc1, num_stokes, n_fre_ang);
     new (&rad_bvar) RadBoundaryVariable(pmb, &ir, &coarse_ir_, flux);
     // initialize full moment set
-    rad_pol_mom.NewAthenaArray((num_stokes-1)*num_moments_per_stok,nc3,nc2,nc1);
-    rad_full_mom_cm.NewAthenaArray(num_stokes*num_moments_per_stok,nc3,nc2,nc1);
+    rad_pol_mom.NewAthenaArray((num_stokes-1)*num_moments_per_stok,nc3,nc2,nc1); // 4-rank moment tensor for Q, U, V
+    rad_full_mom_cm.NewAthenaArray(num_stokes*num_moments_per_stok,nc3,nc2,nc1); // 4-rank moment tensor for I, Q, U, V
     rad_spec_mom_cm.NewAthenaArray(num_spec_moments_in_tot,nc3,nc2,nc1); // PQ^c, PQ^s, PU^zc, PU^zs
   }
   /***** modifications for polarization *****/

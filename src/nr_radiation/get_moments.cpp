@@ -344,10 +344,10 @@ void NRRadiation::CalculateFullMoment(AthenaArray<Real> &ir_in) {
 
             // assign the moments
             if (m==0) {
-              rad_mom(IER,k,j,i) += er;
-              rad_mom(IFR1,k,j,i) += frx;
-              rad_mom(IFR2,k,j,i) += fry;
-              rad_mom(IFR3,k,j,i) += frz;
+              rad_mom(IER,k,j,i)   += er;
+              rad_mom(IFR1,k,j,i)  += frx;
+              rad_mom(IFR2,k,j,i)  += fry;
+              rad_mom(IFR3,k,j,i)  += frz;
               rad_mom(IPR11,k,j,i) += prxx;
               rad_mom(IPR22,k,j,i) += pryy;
               rad_mom(IPR33,k,j,i) += przz;
@@ -394,8 +394,9 @@ void NRRadiation::CalculateFullComMoment() {
   if (n2z > 1) n2z += (2*(NGHOST));
   if (n3z > 1) n3z += (2*(NGHOST));
 
-  AthenaArray<Real> &i_mom = rad_full_mom_cm;
-  AthenaArray<Real> &i_mom_spec = rad_spec_mom_cm;
+  AthenaArray<Real> &i_mom = rad_mom_cm;
+  AthenaArray<Real> &i_full_mom = rad_full_mom_cm;
+  AthenaArray<Real> &i_spec_mom = rad_spec_mom_cm;
   Real *weight = &(wmu(0));
   Real *ir_output, *iqq_output, *iuu_output;
   // Get the temporary array
@@ -411,27 +412,38 @@ void NRRadiation::CalculateFullComMoment() {
   AthenaArray<int> map_start, map_end;
 
   // reset the moment arrays to be zero
-  for (int n=0; n<num_moments_in_tot; ++n) {
+  for (int n=0; n<4; ++n) {
     for (int k=0; k<n3z; ++k) {
       for (int j=0; j<n2z; ++j) {
 //#pragma omp simd
         for (int i=0; i<n1z; ++i) {
           i_mom(n,k,j,i) = 0.0;
-        }
-      }
-    }
-  }
+        } // endfor i
+      } // endfor j
+    } // endfor k
+  } // endfor n
+  for (int n=0; n<num_moments_in_tot; ++n) {
+    for (int k=0; k<n3z; ++k) {
+      for (int j=0; j<n2z; ++j) {
+//#pragma omp simd
+        for (int i=0; i<n1z; ++i) {
+          i_full_mom(n,k,j,i) = 0.0;
+        } // endfor i
+      } // endfor j
+    } // endfor k
+  } // endfor n
   for (int n=0; n<num_spec_moments_in_tot; ++n) {
     for (int k=0; k<n3z; ++k) {
       for (int j=0; j<n2z; ++j) {
 //#pragma omp simd
         for (int i=0; i<n1z; ++i) {
-          i_mom_spec(n,k,j,i) = 0.0;
-        }
-      }
-    }
-  }
+          i_spec_mom(n,k,j,i) = 0.0;
+        } // endfor i
+      } // endfor j
+    } // endfor k
+  } // endfor n
 
+  // compute moments
   for (int k=0; k<n3z; ++k) {
     for (int j=0; j<n2z; ++j) {
       for (int i=0; i<n1z; ++i) {
@@ -471,19 +483,19 @@ void NRRadiation::CalculateFullComMoment() {
           cosx_cm(n) = (cosx[n] - vx * angcoef) * incoef;
           cosy_cm(n) = (cosy[n] - vy * angcoef) * incoef;
           cosz_cm(n) = (cosz[n] - vz * angcoef) * incoef;
-        }
+        } // endfor n
         numsum = 1.0/numsum;
 //#pragma omp simd
         for (int n=0; n<nang; ++n) {
            wmu_cm(n) *= numsum;
-        }
+        } // endfor n
 
         for (int m=0; m<num_stokes; ++m) {
           for (int ifr=0; ifr<nfreq; ++ifr) {
             for (int n=0; n<nang; ++n) {
               ir_cm(m,ifr*nang+n) = ir(k,j,i,m,ifr*nang+n) * cm_to_lab(n);
-            }
-          }
+            } // endfor n
+          } // endfor ifr
         } // endfor m
 
         Real *cm_weight = &(wmu_cm(0));
@@ -505,25 +517,31 @@ void NRRadiation::CalculateFullComMoment() {
               prxy += ir_weight * cosx_cm(n) * cosy_cm(n);
               prxz += ir_weight * cosx_cm(n) * cosz_cm(n);
               pryz += ir_weight * cosy_cm(n) * cosz_cm(n);
+            } // endfor n
+            if (m==0) { // for writing the output
+              i_mom(IER,k,j,i)  += er;
+              i_mom(IFR1,k,j,i) += frx;
+              i_mom(IFR2,k,j,i) += fry;
+              i_mom(IFR3,k,j,i) += frz;
             }
-            i_mom(num_moments_per_stok*m+IER,k,j,i)   += er;
-            i_mom(num_moments_per_stok*m+IFR1,k,j,i)  += frx;
-            i_mom(num_moments_per_stok*m+IFR2,k,j,i)  += fry;
-            i_mom(num_moments_per_stok*m+IFR3,k,j,i)  += frz;
-            i_mom(num_moments_per_stok*m+IPR11,k,j,i) += prxx;
-            i_mom(num_moments_per_stok*m+IPR22,k,j,i) += pryy;
-            i_mom(num_moments_per_stok*m+IPR33,k,j,i) += przz;
-            i_mom(num_moments_per_stok*m+IPR12,k,j,i) += prxy;
-            i_mom(num_moments_per_stok*m+IPR13,k,j,i) += prxz;
-            i_mom(num_moments_per_stok*m+IPR23,k,j,i) += pryz;
-            i_mom(num_moments_per_stok*m+IPR21,k,j,i) += prxy;
-            i_mom(num_moments_per_stok*m+IPR31,k,j,i) += prxz;
-            i_mom(num_moments_per_stok*m+IPR32,k,j,i) += pryz;
-          }
+            i_full_mom(num_moments_per_stok*m+IER,k,j,i)   += er;
+            i_full_mom(num_moments_per_stok*m+IFR1,k,j,i)  += frx;
+            i_full_mom(num_moments_per_stok*m+IFR2,k,j,i)  += fry;
+            i_full_mom(num_moments_per_stok*m+IFR3,k,j,i)  += frz;
+            i_full_mom(num_moments_per_stok*m+IPR11,k,j,i) += prxx;
+            i_full_mom(num_moments_per_stok*m+IPR22,k,j,i) += pryy;
+            i_full_mom(num_moments_per_stok*m+IPR33,k,j,i) += przz;
+            i_full_mom(num_moments_per_stok*m+IPR12,k,j,i) += prxy;
+            i_full_mom(num_moments_per_stok*m+IPR13,k,j,i) += prxz;
+            i_full_mom(num_moments_per_stok*m+IPR23,k,j,i) += pryz;
+            i_full_mom(num_moments_per_stok*m+IPR21,k,j,i) += prxy;
+            i_full_mom(num_moments_per_stok*m+IPR31,k,j,i) += prxz;
+            i_full_mom(num_moments_per_stok*m+IPR32,k,j,i) += pryz;
+          } // endfor ifr
         } // endfor m
 
         // integrate special moments
-        Real PQ_c=0.0, PU_zs=0.0, PQ_s=0.0, PU_zc=0.0;
+        Real PQ_c=0.0, PQ_s=0.0, PU_zc=0.0, PU_zs=0.0;
         for (int ifr=0; ifr<nfreq; ++ifr) {
           iqq_output = &(ir_cm(1,ifr*nang));
           iuu_output = &(ir_cm(2,ifr*nang));
@@ -535,24 +553,25 @@ void NRRadiation::CalculateFullComMoment() {
             Real sin_2ph = 2 * cosx_cm(n) * cosy_cm(n) / (SQR(cosx_cm(n)) + SQR(cosy_cm(n)));
             PQ_c  += iqq_weight * cos_2ph;
             PQ_s  += iqq_weight * sin_2ph;
-            PU_zc += iuu_weight * cosz_cm(n) * sin_2ph;
-            PU_zs += iuu_weight * cosz_cm(n) * cos_2ph;
-          }
-          i_mom_spec(0,k,j,i) += PQ_c;
-          i_mom_spec(1,k,j,i) += PQ_s;
-          i_mom_spec(2,k,j,i) += PU_zc;
-          i_mom_spec(3,k,j,i) += PU_zs;
-        }
+            PU_zc += iuu_weight * cosz_cm(n) * cos_2ph;
+            PU_zs += iuu_weight * cosz_cm(n) * sin_2ph;
+          } // endfor n
+          i_spec_mom(0,k,j,i) += PQ_c;
+          i_spec_mom(1,k,j,i) += PQ_s;
+          i_spec_mom(2,k,j,i) += PU_zc;
+          i_spec_mom(3,k,j,i) += PU_zs;
+        } // endfor ifr
 
         // prepare the opacity array for output
         for (int ifr=0; ifr<nfreq; ++ifr) {
           output_sigma(3*ifr+OPAS,k,j,i) = sigma_s(k,j,i,ifr);
           output_sigma(3*ifr+OPAA,k,j,i) = sigma_a(k,j,i,ifr);
           output_sigma(3*ifr+OPAP,k,j,i) = sigma_p(k,j,i,ifr);
-        }
-      }
-    }
-  }
+        } // endfor ifr
+      } // endfor i
+    } // endfor j
+  } // endfor k
+
   return;
 }
 

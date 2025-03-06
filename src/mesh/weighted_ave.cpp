@@ -347,7 +347,7 @@ void MeshBlock::WeightedAve(AthenaArray<Real> &u_out, AthenaArray<Real> &u_in1,
       }
     }
   } else if (flag == 2) { // modifications for polarization
-    const int nstok = u_out.GetDim2() - 1;
+    const int nstok = u_out.GetDim2();
     const int nu = u_out.GetDim1() - 1;
     // u_in2 may be an unallocated AthenaArray if using a 2S time integrator
     if (wght[0] == 1.0) {
