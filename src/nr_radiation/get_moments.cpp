@@ -280,7 +280,6 @@ void NRRadiation::CalculateComMoment() {
 
 
 /*************** modifications for polarization ***************/
-
 //--------------------------------------------------------------------------------------
 // \!fn void CalculateFullMoment()
 // \brief function to create the radiation moments
@@ -574,5 +573,4 @@ void NRRadiation::CalculateFullComMoment() {
 
   return;
 }
-
 /*************** modifications for polarization ***************/

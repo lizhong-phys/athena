@@ -461,6 +461,7 @@ void RadIntegrator::CalculateFluxes(AthenaArray<Real> &w,
 }
 
 
+/***** modifications for polarization *****/
 // calculate the transport flux in polarized RT
 void RadIntegrator::CalculatePolFluxes(AthenaArray<Real> &w, AthenaArray<Real> &ir, const int order) {
   NRRadiation *prad=pmy_rad;
@@ -765,7 +766,7 @@ void RadIntegrator::CalculatePolFluxes(AthenaArray<Real> &w, AthenaArray<Real> &
   } // endif pmb->pmy_mesh->f3
 
 }
-
+/***** modifications for polarization *****/
 
 // calculate advective flux for the implicit scheme
 void RadIntegrator::CalculateFluxes(AthenaArray<Real> &ir, const int order) {
@@ -1146,6 +1147,7 @@ void RadIntegrator::FluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
   }
 }
 
+/***** modifications for polarization *****/
 // add flux divergence in polarized RT
 void RadIntegrator::PolFluxDivergence(const Real wght, AthenaArray<Real> &ir_in, AthenaArray<Real> &ir_out) {
   NRRadiation *prad=pmy_rad;
@@ -1220,3 +1222,4 @@ void RadIntegrator::PolFluxDivergence(const Real wght, AthenaArray<Real> &ir_in,
     } // endfor k
   } // endfor m
 }
+/***** modifications for polarization *****/

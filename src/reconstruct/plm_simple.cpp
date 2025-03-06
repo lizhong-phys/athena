@@ -121,9 +121,9 @@ void Reconstruction::PiecewiseLinearX1(
 
     // compute L/R slopes for each variable
     for (int i=il; i<=iu; ++i) {
-      Real *qn   = (polIdx < 0) ? &(q(k,j,i,0))   : &(q(k,j,i,polIdx,0));
-      Real *q1n  = (polIdx < 0) ? &(q(k,j,i+1,0)) : &(q(k,j,i+1,polIdx,0));
-      Real *q2n  = (polIdx < 0) ? &(q(k,j,i-1,0)) : &(q(k,j,i-1,polIdx,0));
+      Real *qn   = (polIdx < 0) ? &(q(k,j,i,0))   : &(q(k,j,i,polIdx,0));   // modifications for polarization
+      Real *q1n  = (polIdx < 0) ? &(q(k,j,i+1,0)) : &(q(k,j,i+1,polIdx,0)); // modifications for polarization
+      Real *q2n  = (polIdx < 0) ? &(q(k,j,i-1,0)) : &(q(k,j,i-1,polIdx,0)); // modifications for polarization
       Real *dqln = &(dql(i,0));
       Real *dqrn = &(dqr(i,0));
       Real *qcn  = &(qc(i,0));
@@ -290,9 +290,9 @@ void Reconstruction::PiecewiseLinearX2(
 
     // compute L/R slopes for each variable
     for (int i=il; i<=iu; ++i) {
-      Real *qn   = (polIdx < 0) ? &(q(k,j  ,i,0)) : &(q(k,j  ,i,polIdx,0));
-      Real *q1n  = (polIdx < 0) ? &(q(k,j+1,i,0)) : &(q(k,j+1,i,polIdx,0));
-      Real *q2n  = (polIdx < 0) ? &(q(k,j-1,i,0)) : &(q(k,j-1,i,polIdx,0));
+      Real *qn   = (polIdx < 0) ? &(q(k,j  ,i,0)) : &(q(k,j  ,i,polIdx,0)); // modifications for polarization
+      Real *q1n  = (polIdx < 0) ? &(q(k,j+1,i,0)) : &(q(k,j+1,i,polIdx,0)); // modifications for polarization
+      Real *q2n  = (polIdx < 0) ? &(q(k,j-1,i,0)) : &(q(k,j-1,i,polIdx,0)); // modifications for polarization
       Real *dqln = &(dql(i,0));
       Real *dqrn = &(dqr(i,0));
       Real *qcn  = &(qc(i,0));
@@ -455,9 +455,9 @@ void Reconstruction::PiecewiseLinearX3(
 
     // compute L/R slopes for each variable
     for (int i=il; i<=iu; ++i) {
-      Real *qn  = (polIdx < 0) ? &(q(k,j  ,i,0)) : &(q(k,j  ,i,polIdx,0));
-      Real *q1n = (polIdx < 0) ? &(q(k+1,j,i,0)) : &(q(k+1,j,i,polIdx,0));
-      Real *q2n = (polIdx < 0) ? &(q(k-1,j,i,0)) : &(q(k-1,j,i,polIdx,0));
+      Real *qn  = (polIdx < 0) ? &(q(k,j  ,i,0)) : &(q(k,j  ,i,polIdx,0)); // modifications for polarization
+      Real *q1n = (polIdx < 0) ? &(q(k+1,j,i,0)) : &(q(k+1,j,i,polIdx,0)); // modifications for polarization
+      Real *q2n = (polIdx < 0) ? &(q(k-1,j,i,0)) : &(q(k-1,j,i,polIdx,0)); // modifications for polarization
       Real *dqln = &(dql(i,0));
       Real *dqrn = &(dqr(i,0));
       Real *qcn  = &(qc(i,0));

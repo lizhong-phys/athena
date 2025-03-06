@@ -142,7 +142,7 @@ void ATHDF5Output::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool flag) {
     }
     if(NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) {
       num_variables[n_dataset] += 20 * pmb->pnrrad->nfreq;
-      if (pmb->pnrrad->use_pol_rad) {
+      if (pmb->pnrrad->use_pol_rad) {  // modifications for polarization
         int num_stok = pmb->pnrrad->num_stokes;
         num_variables[n_dataset] += (1+3) * (num_stok-1);
       }

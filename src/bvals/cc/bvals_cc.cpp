@@ -167,8 +167,14 @@ CellCenteredBoundaryVariable::CellCenteredBoundaryVariable(
     ATHENA_ERROR(msg);
   }
 
-  use_pol_rad = false; 
-  if (var->GetDim2() == 4) use_pol_rad = true; // modifications for polarization
+  use_pol_rad = false;
+  // modifications for polarization
+  if ((var->GetDim2()==4)
+    && (var->GetDim3()==pmb->ncells1)
+    && (var->GetDim4()==pmb->ncells2)
+    && (var->GetDim5()==pmb->ncells3)) {
+    use_pol_rad = true;
+  }
 
   // KT: fflux is a flag and it is true (false) when flux correction is (not) needed.
   //     I have not implemented it for shearing box, leaving it to Tomohiro.

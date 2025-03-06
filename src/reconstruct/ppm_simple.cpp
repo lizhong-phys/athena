@@ -329,11 +329,11 @@ void Reconstruction::PiecewiseParabolicX1(
     for (int i=il; i<=iu; ++i) {
 #pragma omp simd
       for (int n=0; n<=nu; ++n) {
-        q_i  (n,i) = (polIdx < 0) ? q(k,j,i  ,n) : q(k,j,i  ,polIdx,n);
-        q_im2(n,i) = (polIdx < 0) ? q(k,j,i-2,n) : q(k,j,i-2,polIdx,n);
-        q_im1(n,i) = (polIdx < 0) ? q(k,j,i-1,n) : q(k,j,i-1,polIdx,n);
-        q_ip1(n,i) = (polIdx < 0) ? q(k,j,i+1,n) : q(k,j,i+1,polIdx,n);
-        q_ip2(n,i) = (polIdx < 0) ? q(k,j,i+2,n) : q(k,j,i+2,polIdx,n);
+        q_i  (n,i) = (polIdx < 0) ? q(k,j,i  ,n) : q(k,j,i  ,polIdx,n); // modifications for polarization
+        q_im2(n,i) = (polIdx < 0) ? q(k,j,i-2,n) : q(k,j,i-2,polIdx,n); // modifications for polarization
+        q_im1(n,i) = (polIdx < 0) ? q(k,j,i-1,n) : q(k,j,i-1,polIdx,n); // modifications for polarization
+        q_ip1(n,i) = (polIdx < 0) ? q(k,j,i+1,n) : q(k,j,i+1,polIdx,n); // modifications for polarization
+        q_ip2(n,i) = (polIdx < 0) ? q(k,j,i+2,n) : q(k,j,i+2,polIdx,n); // modifications for polarization
       }
     }
 
@@ -839,11 +839,11 @@ void Reconstruction::PiecewiseParabolicX2(
     for (int i=il; i<=iu; ++i) {
 #pragma omp simd
       for (int n=0; n<=nu; ++n) {
-        q_j  (n,i) = (polIdx < 0) ? q(k,j  ,i,n) : q(k,j  ,i,polIdx,n);
-        q_jm2(n,i) = (polIdx < 0) ? q(k,j-2,i,n) : q(k,j-2,i,polIdx,n);
-        q_jm1(n,i) = (polIdx < 0) ? q(k,j-1,i,n) : q(k,j-1,i,polIdx,n);
-        q_jp1(n,i) = (polIdx < 0) ? q(k,j+1,i,n) : q(k,j+1,i,polIdx,n);
-        q_jp2(n,i) = (polIdx < 0) ? q(k,j+2,i,n) : q(k,j+2,i,polIdx,n);
+        q_j  (n,i) = (polIdx < 0) ? q(k,j  ,i,n) : q(k,j  ,i,polIdx,n); // modifications for polarization
+        q_jm2(n,i) = (polIdx < 0) ? q(k,j-2,i,n) : q(k,j-2,i,polIdx,n); // modifications for polarization
+        q_jm1(n,i) = (polIdx < 0) ? q(k,j-1,i,n) : q(k,j-1,i,polIdx,n); // modifications for polarization
+        q_jp1(n,i) = (polIdx < 0) ? q(k,j+1,i,n) : q(k,j+1,i,polIdx,n); // modifications for polarization
+        q_jp2(n,i) = (polIdx < 0) ? q(k,j+2,i,n) : q(k,j+2,i,polIdx,n); // modifications for polarization
       }
     }
 
@@ -1343,11 +1343,11 @@ void Reconstruction::PiecewiseParabolicX3(
     for (int i=il; i<=iu; ++i) {
 //#pragma omp simd
       for (int n=0; n<=nu; ++n) {
-        q_k  (n,i) = (polIdx < 0) ? q(k  ,j,i,n) : q(k  ,j,i,polIdx,n);
-        q_km2(n,i) = (polIdx < 0) ? q(k-2,j,i,n) : q(k-2,j,i,polIdx,n);
-        q_km1(n,i) = (polIdx < 0) ? q(k-1,j,i,n) : q(k-1,j,i,polIdx,n);
-        q_kp1(n,i) = (polIdx < 0) ? q(k+1,j,i,n) : q(k+1,j,i,polIdx,n);
-        q_kp2(n,i) = (polIdx < 0) ? q(k+2,j,i,n) : q(k+2,j,i,polIdx,n);
+        q_k  (n,i) = (polIdx < 0) ? q(k  ,j,i,n) : q(k  ,j,i,polIdx,n); // modifications for polarization
+        q_km2(n,i) = (polIdx < 0) ? q(k-2,j,i,n) : q(k-2,j,i,polIdx,n); // modifications for polarization
+        q_km1(n,i) = (polIdx < 0) ? q(k-1,j,i,n) : q(k-1,j,i,polIdx,n); // modifications for polarization
+        q_kp1(n,i) = (polIdx < 0) ? q(k+1,j,i,n) : q(k+1,j,i,polIdx,n); // modifications for polarization
+        q_kp2(n,i) = (polIdx < 0) ? q(k+2,j,i,n) : q(k+2,j,i,polIdx,n); // modifications for polarization
       }
     }
 

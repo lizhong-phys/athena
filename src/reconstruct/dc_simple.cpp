@@ -44,11 +44,11 @@ void Reconstruction::DonorCellX1(const int k, const int j, const int il, const i
                                  AthenaArray<Real> &q, const int array_order,
                                  AthenaArray<Real> &ql, AthenaArray<Real> &qr) {
   if ((array_order < 0) || ((array_order >= 0) && (array_order <= 3))) {
-    int polIdx = array_order;
+    int polIdx = array_order; 
     const int nu = q.GetDim1() - 1;
     // compute L/R states for each variable
     for (int i=il; i<=iu; ++i) {
-      Real *qn  = (polIdx < 0) ? &(q(k,j,i,0)) : &(q(k,j,i,polIdx,0));
+      Real *qn  = (polIdx < 0) ? &(q(k,j,i,0)) : &(q(k,j,i,polIdx,0)); // modifications for polarization
       Real *qln = &(ql(i+1,0));
       Real *qrn = &(qr(i,0));
       for (int n=0; n<=nu; ++n) {
@@ -89,7 +89,7 @@ void Reconstruction::DonorCellX2(const int k, const int j, const int il, const i
     const int nu = q.GetDim1() - 1;
     // compute L/R states for each variable
     for (int i=il; i<=iu; ++i) {
-      Real *qn  = (polIdx < 0) ? &(q(k,j,i,0)) : &(q(k,j,i,polIdx,0));
+      Real *qn  = (polIdx < 0) ? &(q(k,j,i,0)) : &(q(k,j,i,polIdx,0)); // modifications for polarization
       Real *qln = &(ql(i,0));
       Real *qrn = &(qr(i,0));
       for (int n=0; n<=nu; ++n) {
@@ -130,7 +130,7 @@ void Reconstruction::DonorCellX3(const int k, const int j, const int il, const i
   const int nu = q.GetDim1() - 1;
   // compute L/R states for each variable
   for (int i=il; i<=iu; ++i) {
-    Real *qn  = (polIdx < 0) ? &(q(k,j,i,0)) : &(q(k,j,i,polIdx,0));
+    Real *qn  = (polIdx < 0) ? &(q(k,j,i,0)) : &(q(k,j,i,polIdx,0)); // modifications for polarization
     Real *qln = &(ql(i,0));
     Real *qrn = &(qr(i,0));
     for (int n=0; n<=nu; ++n) {

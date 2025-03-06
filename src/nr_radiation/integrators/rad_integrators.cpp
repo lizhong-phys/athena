@@ -398,7 +398,7 @@ void RadIntegrator::GetTgasVel(MeshBlock *pmb, const Real dt,
   Coordinates *pco=pmb->pcoord;
 
   const Real& prat = prad->prat;
-  bool use_pol_rad_ = prad->use_pol_rad;
+  bool use_pol_rad_ = prad->use_pol_rad;  // modifications for polarization
   Real invcrat = 1.0/prad->crat;
 
   const int &nang =prad->nang;

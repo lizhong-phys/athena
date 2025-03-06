@@ -1507,12 +1507,12 @@ void Outputs::MakeOutputs(Mesh *pm, ParameterInput *pin, bool wtflag) {
         for(int b=0; b<pm->nblocal; ++b) {
           pmb = pm->my_blocks(b);
           // Calculate Com-moving moments and grey opacity for dump
-          if (pmb->pnrrad->use_pol_rad) {
-            pmb->pnrrad->CalculateFullMoment(pmb->pnrrad->ir);
-            pmb->pnrrad->CalculateFullComMoment();
-          } else {
+          if (!pmb->pnrrad->use_pol_rad) {
             pmb->pnrrad->CalculateMoment(pmb->pnrrad->ir);
             pmb->pnrrad->CalculateComMoment();
+          } else { // modifications for polarization
+            pmb->pnrrad->CalculateFullMoment(pmb->pnrrad->ir);
+            pmb->pnrrad->CalculateFullComMoment();
           }
         }
         rad_mom = false;
