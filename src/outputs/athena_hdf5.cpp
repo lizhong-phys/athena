@@ -144,7 +144,12 @@ void ATHDF5Output::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool flag) {
       num_variables[n_dataset] += 20 * pmb->pnrrad->nfreq;
       if (pmb->pnrrad->use_pol_rad) {  // modifications for polarization
         int num_stok = pmb->pnrrad->num_stokes;
-        num_variables[n_dataset] += (1+3) * (num_stok-1);
+        int n_mom_per_stok = pmb->pnrrad->num_moments_per_stok;
+        int n_spec_mom_in_tot = pmb->pnrrad->num_spec_moments_in_tot;
+        num_variables[n_dataset] += n_mom_per_stok * (num_stok-1); // add O, U, V moments in lab frame
+        num_variables[n_dataset] += n_mom_per_stok - 4; // add extra I moments in fluid frame
+        num_variables[n_dataset] += n_mom_per_stok * (num_stok-1); // add O, U, V moments in fluid frame
+        num_variables[n_dataset] += n_spec_mom_in_tot;  // add special moments in fluid frame
       }
     }
 

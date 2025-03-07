@@ -862,15 +862,13 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
 
       /***** modifications for polarization *****/
       if (prad->use_pol_rad) {
+        //----- Lab Frame -----//
+        // starting index of Stokes parameters in lab frame
         int QIdx_s = 0*prad->num_moments_per_stok;
         int UIdx_s = 1*prad->num_moments_per_stok;
         int VIdx_s = 2*prad->num_moments_per_stok;
 
-        // TODO: Add output for Pr_Q, Pr_U, Pr_V
-        // TODO: Add output for Er0_Q, Er0_U, Er0_V
-        // TODO: Add output for Fr0_i_Q, Fr0_i_U, Fr0_i_V
-        // TODO: Add output for Pr0_ij_Q, Pr0_ij_U, Pr0_ij_V
-
+        // Q mode in lab frame
         if (ContainVariable(output_params.variable, "Er_Q") ||
             ContainVariable(output_params.variable, "prim") ||
             ContainVariable(output_params.variable, "cons")) {
@@ -912,6 +910,18 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
           num_vars_++;
         }
 
+        if (ContainVariable(output_params.variable, "Pr_Q") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = "Pr_Q";
+          pod->data.InitWithShallowSlice(prad->rad_pol_mom,4,QIdx_s+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_ += 9;
+        }
+
+        // U mode in lab frame
         if (ContainVariable(output_params.variable, "Er_U") ||
             ContainVariable(output_params.variable, "prim") ||
             ContainVariable(output_params.variable, "cons")) {
@@ -953,6 +963,18 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
           num_vars_++;
         }
 
+        if (ContainVariable(output_params.variable, "Pr_U") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = "Pr_U";
+          pod->data.InitWithShallowSlice(prad->rad_pol_mom,4,UIdx_s+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_ += 9;
+        }
+
+        // V mode in lab frame
         if (ContainVariable(output_params.variable, "Er_V") ||
             ContainVariable(output_params.variable, "prim") ||
             ContainVariable(output_params.variable, "cons")) {
@@ -990,6 +1012,240 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
           pod->type = "SCALARS";
           pod->name = "Fr3_V";
           pod->data.InitWithShallowSlice(prad->rad_pol_mom,4,VIdx_s+IFR3,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Pr_V") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = "Pr_V";
+          pod->data.InitWithShallowSlice(prad->rad_pol_mom,4,VIdx_s+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_ += 9;
+        }
+
+        //----- Fluid Frame -----//
+        // starting index of Stokes parameters in fluid frame
+        int IIdx_s = 0*prad->num_moments_per_stok;
+        QIdx_s = 1*prad->num_moments_per_stok;
+        UIdx_s = 2*prad->num_moments_per_stok;
+        VIdx_s = 3*prad->num_moments_per_stok;
+
+        // I extra moments in fluid frame
+        if (ContainVariable(output_params.variable, "Pr0") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = "Pr0";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,IIdx_s+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_ += 9;
+        }
+
+        // Q mode in fluid frame
+        if (ContainVariable(output_params.variable, "Er0_Q") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Er0_Q";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,QIdx_s+IER,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0x_Q") ||
+            ContainVariable(output_params.variable, "Fr01_Q")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr01_Q";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,QIdx_s+IFR1,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0y_Q") ||
+            ContainVariable(output_params.variable, "Fr02_Q")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr02_Q";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,QIdx_s+IFR2,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0z_Q") ||
+            ContainVariable(output_params.variable, "Fr03_Q")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr03_Q";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,QIdx_s+IFR3,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Pr0_Q") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = "Pr0_Q";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,QIdx_s+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_ += 9;
+        }
+
+        // U mode in fluid frame
+        if (ContainVariable(output_params.variable, "Er0_U") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Er0_U";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,UIdx_s+IER,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0x_U") ||
+            ContainVariable(output_params.variable, "Fr01_U")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr01_U";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,UIdx_s+IFR1,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0y_U") ||
+            ContainVariable(output_params.variable, "Fr02_U")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr02_U";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,UIdx_s+IFR2,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0z_U") ||
+            ContainVariable(output_params.variable, "Fr03_U")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr03_U";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,UIdx_s+IFR3,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Pr0_U") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = "Pr0_U";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,UIdx_s+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_ += 9;
+        }
+
+        // V mode in fluid frame
+        if (ContainVariable(output_params.variable, "Er0_V") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Er0_V";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,VIdx_s+IER,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0x_V") ||
+            ContainVariable(output_params.variable, "Fr01_V")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr01_V";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,VIdx_s+IFR1,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0y_V") ||
+            ContainVariable(output_params.variable, "Fr02_V")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr02_V";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,VIdx_s+IFR2,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Fr0z_V") ||
+            ContainVariable(output_params.variable, "Fr03_V")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Fr03_V";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,VIdx_s+IFR3,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Pr0_V") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = "Pr0_V";
+          pod->data.InitWithShallowSlice(prad->rad_full_mom_cm,4,VIdx_s+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_ += 9;
+        }
+
+        // special fluid-frame moments
+        if (ContainVariable(output_params.variable, "Pc0_Q") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Pc0_Q";
+          pod->data.InitWithShallowSlice(prad->rad_spec_mom_cm,4,0,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Ps0_Q") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Ps0_Q";
+          pod->data.InitWithShallowSlice(prad->rad_spec_mom_cm,4,1,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Pzc0_U") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Pzc0_U";
+          pod->data.InitWithShallowSlice(prad->rad_spec_mom_cm,4,2,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, "Pzs0_U") ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = "Pzs0_U";
+          pod->data.InitWithShallowSlice(prad->rad_spec_mom_cm,4,3,1);
           AppendOutputDataNode(pod);
           num_vars_++;
         }
