@@ -173,6 +173,19 @@ class RadIntegrator {
   /***** modifications for polarization *****/
   void CalculatePolFluxes(AthenaArray<Real> &w, AthenaArray<Real> &ir, const int order);
   void PolFluxDivergence(const Real wght, AthenaArray<Real> &ir_in, AthenaArray<Real> &ir_out);
+
+  void CalPolSrc(MeshBlock *pmb, const Real dt, const int k, const int j, const int i,
+                 AthenaArray<Real> &u, AthenaArray<Real> &ir_ini, AthenaArray<Real> &ir);
+
+  Real PolAbsScat(AthenaArray<Real> &wmu_cm, AthenaArray<Real> &tran_coef,
+                  AthenaArray<Real> &nx_cm, AthenaArray<Real> &ny_cm, AthenaArray<Real> &nz_cm,
+                  Real *sigma_a, Real *sigma_p, Real *sigma_ae, Real *sigma_s,
+                  Real dt, Real lorz, Real rho, Real &tgas, AthenaArray<Real> &ir_cm);
+
+  void CalPolAux(AthenaArray<Real> &wmu_cm, AthenaArray<Real> &tran_coef,
+                 AthenaArray<Real> &nx_cm, AthenaArray<Real> &ny_cm, AthenaArray<Real> &nz_cm,
+                 Real *sigma_a, Real *sigma_p, Real *sigma_pe, Real *sigma_s,
+                 Real dt, AthenaArray<Real> &ir_cm);
   /***** modifications for polarization *****/
 
  private:
@@ -243,6 +256,11 @@ class RadIntegrator {
   int iteration_tgas_, iteration_compton_;
   Real tgas_error_, compton_error_;
   int nmax_map_; //maximum number of frequency bins that each bin will map to
+
+  /***** modifications for polarization *****/
+  AthenaArray<Real> pol_mom_, polVecA_, polVecB_, M_coeff_, M_inv_;
+  AthenaArray<Real> nx_cm_, ny_cm_, nz_cm_;
+  /***** modifications for polarization *****/
 };
 
 #endif // NR_RADIATION_INTEGRATORS_RAD_INTEGRATORS_HPP_

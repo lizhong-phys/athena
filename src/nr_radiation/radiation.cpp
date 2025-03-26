@@ -256,7 +256,7 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
     rad_mom_cm_nu.NewAthenaArray(4*nfreq,nc3,nc2,nc1);
   }
 
-  /***** modifications for polarization *****/
+  /*************** modifications for polarization ***************/
   use_pol_rad = pin->GetOrAddBoolean("radiation", "polarization", false);
   if (use_pol_rad) {
     // check if polarized radiation transfer can be used
@@ -278,6 +278,8 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
           << "Stokes parameters are only implicitly updated with source terms" << std::endl;
       ATHENA_ERROR(msg);
     }
+    tst_tgas_ini_guess = pin->GetOrAddBoolean("radiation", "tst_tgas_ini_guess", false);
+    refine_pol_coeff = pin->GetOrAddBoolean("radiation", "refine_pol_coeff", false);
     // deconstruct variables
     ir.DeleteAthenaArray();
     ir1.DeleteAthenaArray();
@@ -303,7 +305,7 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
     rad_full_mom_cm.NewAthenaArray(num_stokes*num_moments_per_stok,nc3,nc2,nc1); // 4-rank moment tensor for I, Q, U, V
     rad_spec_mom_cm.NewAthenaArray(num_spec_moments_in_tot,nc3,nc2,nc1); // PQ^c, PQ^s, PU^zc, PU^zs
   }
-  /***** modifications for polarization *****/
+  /*************** modifications for polarization ***************/
 
   // the equation is
   // (sigma_s+sigma_a)(J-I)  // Rosseland mean

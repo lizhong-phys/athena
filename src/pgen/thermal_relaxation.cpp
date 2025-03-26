@@ -44,6 +44,7 @@
 //  \brief
 //======================================================================================
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
+  bool use_pol_rad = pin->GetOrAddBoolean("radiation", "polarization", false);
   Real tgas, er, sigma;
 
   er = pin->GetOrAddReal("problem","er",10.0);
@@ -72,13 +73,13 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   if (NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) {
     int nfreq = pnrrad->nfreq;
     //int nang = pnrrad->nang;
-    AthenaArray<Real> ir_cm;
-    ir_cm.NewAthenaArray(pnrrad->n_fre_ang);
+    // AthenaArray<Real> ir_cm;
+    // ir_cm.NewAthenaArray(pnrrad->n_fre_ang);
     Real *ir_lab;
     for (int k=ks; k<=ke; ++k) {
       for (int j=js; j<=je; ++j) {
         for (int i=is; i<=ie; ++i) {
-          ir_lab = &(pnrrad->ir(k,j,i,0));
+          ir_lab = (!use_pol_rad) ? &(pnrrad->ir(k,j,i,0)) : &(pnrrad->ir(k,j,i,0,0));
           for (int n=0; n<pnrrad->n_fre_ang; n++) {
              ir_lab[n] = er;
           }
@@ -98,7 +99,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         }
       }
     }
-    ir_cm.DeleteAthenaArray();
+    // ir_cm.DeleteAthenaArray();
   }
   return;
 }

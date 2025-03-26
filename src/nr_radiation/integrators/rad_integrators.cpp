@@ -86,8 +86,6 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
   int ncells1 = pmb->ncells1, ncells2 = pmb->ncells2,
       ncells3 = pmb->ncells3;
 
-
-
   x1face_area_.NewAthenaArray(ncells1+1);
   if (ncells2 > 1) {
     x2face_area_.NewAthenaArray(ncells1);
@@ -122,8 +120,6 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
     sfac2_z_.NewAthenaArray(ncells3,ncells2,ncells1,prad->n_fre_ang);
   }
 
-
-
   sm_diff1_.NewAthenaArray(prad->n_fre_ang);
   sm_diff2_.NewAthenaArray(prad->n_fre_ang);
   vel_ex_l_.NewAthenaArray(prad->n_fre_ang);
@@ -132,7 +128,6 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
   vel_im_r_.NewAthenaArray(prad->n_fre_ang);
 
   adv_vel.NewAthenaArray(3,ncells3,ncells2,ncells1);
-
 
   if (IM_RADIATION_ENABLED) {
     limiter_.NewAthenaArray(ncells1,prad->n_fre_ang);
@@ -173,10 +168,8 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
   vel_source_.NewAthenaArray(ncells3,ncells2,ncells1,3);
   taufact.NewAthenaArray(ncells3,ncells2,ncells1);
 
-
   rad_source.NewAthenaArray(4,ncells3,ncells2,ncells1);
   delta_source.NewAthenaArray(4,nfreq);
-
 
   vel_.NewAthenaArray(ncells3,ncells2,ncells1,prad->n_fre_ang);
   velx_.NewAthenaArray(ncells3,ncells2,ncells1,prad->n_fre_ang);
@@ -196,6 +189,16 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
   if (prad->use_pol_rad) {
     ir_cm_.DeleteAthenaArray();
     ir_cm_.NewAthenaArray(prad->num_stokes, prad->n_fre_ang);
+    // use 23-moments closure
+    polVecA_.NewAthenaArray(23);
+    polVecB_.NewAthenaArray(23);
+    M_coeff_.NewAthenaArray(23,23);
+    M_inv_.NewAthenaArray(23,23);
+    pol_mom_.NewAthenaArray(23);
+    // comoving directions
+    nx_cm_.NewAthenaArray(nang);
+    ny_cm_.NewAthenaArray(nang);
+    nz_cm_.NewAthenaArray(nang);
   }
   /***** modifications for polarization *****/
 

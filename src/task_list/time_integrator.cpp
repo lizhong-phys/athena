@@ -2767,13 +2767,12 @@ TaskStatus TimeIntegratorTaskList::AddSourceTermsRad(MeshBlock *pmb, int stage) 
         for(int j=js; j<=je; ++j)
           for(int i=is; i<=ie; ++i) {
             if (!use_pol_rad_) prad->pradintegrator->CalSourceTerms(pmb, dt, k, j, i, ph->u, prad->ir, prad->ir);
+            else prad->pradintegrator->CalPolSrc(pmb, dt, k, j, i, ph->u, prad->ir, prad->ir);
           }
 
-      if (prad->set_source_flag > 0) {
-        if (!use_pol_rad_) {
-          prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
-          prad->pradintegrator->AddSourceTerms(pmb, ph->u);
-        }
+      if (prad->set_source_flag > 0) { // update fluid quantities
+        prad->pradintegrator->GetHydroSourceTerms(pmb, prad->ir_old, prad->ir);
+        prad->pradintegrator->AddSourceTerms(pmb, ph->u);
       }
     }
     return TaskStatus::next;

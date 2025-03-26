@@ -150,6 +150,7 @@ void RadIntegrator::CalSourceTerms(MeshBlock *pmb, const Real dt,
                                             sigma_pe, sigma_s, dt, lorz, rho,
                                             tgas_(k,j,i),
                                             implicit_coef_, ir_cm);
+
     // Add compton scattering
     if (compton_flag_ > 0) {
       Compton(wmu_cm,tran_coef, sigma_s, dt, lorz, rho, tgas_new_(k,j,i), ir_cm);
@@ -423,6 +424,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
                        AthenaArray<Real> &ir_ini, AthenaArray<Real> &ir) {
   NRRadiation *prad=pmb->pnrrad;
   const Real& prat = prad->prat;
+  bool& use_pol = prad->use_pol_rad;
   Real invcrat = 1.0/prad->crat;
   Real invredc = 1.0/prad->reduced_c;
   Real invredfactor = invredc/invcrat;
@@ -438,7 +440,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
       for (int i=is; i<=ie; ++i) {
         // first, calculate Er and Fr in lab frame before the step
         for (int ifr=0; ifr<nfreq; ++ifr) {
-          Real *p_ir0 =  &(ir_ini(k,j,i,ifr*nang));
+          Real *p_ir0 = (!use_pol) ? &(ir_ini(k,j,i,ifr*nang)) : &(ir_ini(k,j,i,0,ifr*nang));
           Real er_fr = 0.0;
           Real frx_fr = 0.0;
           Real fry_fr = 0.0;
@@ -477,7 +479,7 @@ void RadIntegrator::GetHydroSourceTerms(MeshBlock *pmb,
           delta_source(3,ifr) = frz_fr;
         }
         for (int ifr=0; ifr<nfreq; ++ifr) {
-          Real *p_ir =  &(ir(k,j,i,ifr*nang));
+          Real *p_ir = (!use_pol) ? &(ir(k,j,i,ifr*nang)) : &(ir(k,j,i,0,ifr*nang));
           Real er_fr = 0.0;
           Real frx_fr = 0.0;
           Real fry_fr = 0.0;
@@ -578,3 +580,112 @@ void RadIntegrator::AddSourceTerms(MeshBlock *pmb, AthenaArray<Real> &u) {
     }
   }
 }
+
+
+
+/*************** Modifications for Polarization ***************/
+// Input: ir and ir_ini have shape (nc3, nc2, nc1, num_stokes, n_fre_ang)
+void RadIntegrator::CalPolSrc(MeshBlock *pmb, const Real dt,
+                              const int k, const int j, const int i, AthenaArray<Real> &u,
+                              AthenaArray<Real> &ir_ini, AthenaArray<Real> &ir) {
+  NRRadiation *prad=pmb->pnrrad;
+  Real invcrat = 1.0/prad->crat;
+
+  Real *lab_ir;
+  Real *sigma_at, *sigma_s, *sigma_p, *sigma_pe;
+
+  const int &nang  = prad->nang;
+  const int &nfreq = prad->nfreq;
+  const int &nstok = prad->num_stokes;
+
+  // Get the temporary arrays
+  AthenaArray<Real> &wmu_cm = wmu_cm_;
+  AthenaArray<Real> &nx_cm  = nx_cm_;
+  AthenaArray<Real> &ny_cm  = ny_cm_;
+  AthenaArray<Real> &nz_cm  = nz_cm_;
+  AthenaArray<Real> &tran_coef = tran_coef_;
+  AthenaArray<Real> &ir_cm = ir_cm_;
+  AthenaArray<Real> &cm_to_lab = cm_to_lab_;
+
+  // For relativistic MHD, do variable inversion first
+  // and then assign fluid quantities
+  Real rho = u(IDN,k,j,i);
+  Real vx  = vel_source_(k,j,i,0);
+  Real vy  = vel_source_(k,j,i,1);
+  Real vz  = vel_source_(k,j,i,2);
+  Real vsq = vx*vx + vy*vy + vz*vz;
+
+  Real lorzsq = 1.0/(1.0 - vsq  * invcrat * invcrat);
+  Real lorz = std::sqrt(lorzsq);
+
+  sigma_at = &(prad->sigma_a( k,j,i,0));
+  sigma_s  = &(prad->sigma_s( k,j,i,0));
+  sigma_p  = &(prad->sigma_p( k,j,i,0));
+  sigma_pe = &(prad->sigma_pe(k,j,i,0));
+
+  // Prepare the transformation coefficients
+  Real numsum = 0.0;
+  for (int n=0; n<nang; ++n) {
+    Real vdotn = vx * prad->mu(0,k,j,i,n) + vy * prad->mu(1,k,j,i,n) + vz * prad->mu(2,k,j,i,n);
+    Real vnc = 1.0 - vdotn * invcrat;
+    tran_coef(n) = lorz * vnc; // hollow-L in LZ's notes
+    wmu_cm(n) = prad->wmu(n)/(tran_coef(n) * tran_coef(n));
+    numsum += wmu_cm(n);
+    cm_to_lab(n) = SQR(SQR(tran_coef(n)));
+    // comving directions
+    Real angcoef = lorz * invcrat * (1.0 - lorz * vdotn * invcrat/(1.0+lorz));
+    Real incoef  = 1.0 / (lorz * vnc);
+    nx_cm(n) = (prad->mu(0,k,j,i,n) - vx * angcoef) * incoef;
+    ny_cm(n) = (prad->mu(1,k,j,i,n) - vy * angcoef) * incoef;
+    nz_cm(n) = (prad->mu(2,k,j,i,n) - vz * angcoef) * incoef;
+  }
+
+  // Normalize weight in co-moving frame to make sure the sum is one
+  numsum = 1.0/numsum;
+  for (int n=0; n<nang; ++n) {
+    wmu_cm(n) *= numsum;
+  }
+
+  // Perform frame transformation for Stokes parameters
+  for (int m=0; m<nstok; ++m) {
+    for (int ifr=0; ifr<nfreq; ++ifr) {
+      lab_ir = &(ir_ini(k,j,i,m,ifr*nang));
+      for (int n=0; n<nang; ++n) {
+        Real com_ir = lab_ir[n] * cm_to_lab(n);
+        // apply floor to ir_cm
+        ir_cm(m,n+ifr*nang) = std::max(com_ir, static_cast<Real>(TINY_NUMBER));
+      } // endfor n
+    } // endfor ifr
+  } // endfor m
+
+  // Compute auxiliary coefficents
+  CalPolAux(wmu_cm, tran_coef, nx_cm, ny_cm, nz_cm,
+            sigma_at, sigma_p, sigma_pe, sigma_s, dt, ir_cm);
+
+  // Add absorption and scattering opacity source
+  // both gas temperature and co-moving Stokes parameters are updated here
+  tgas_new_(k,j,i) = PolAbsScat(wmu_cm, tran_coef, nx_cm, ny_cm, nz_cm,
+                                sigma_at, sigma_p, sigma_pe, sigma_s,
+                                dt, lorz, rho, tgas_(k,j,i), ir_cm);
+
+  // TODO: Add compton scattering
+  // if (compton_flag_ > 0) {
+  //   Compton(wmu_cm, tran_coef, sigma_s, dt, lorz, rho, tgas_new_(k,j,i), ir_cm);
+  // }
+
+  // update specific intensity in the lab frame
+  // do not modify ir_ini
+  for (int m=0; m<nstok; ++m) {
+    for (int ifr=0; ifr<nfreq; ++ifr) {
+      lab_ir = &(ir(k,j,i,m,ifr*nang));
+      for (int n=0; n<nang; ++n) {
+        lab_ir[n] = std::max(ir_cm(m,n+ifr*nang)/cm_to_lab(n), static_cast<Real>(TINY_NUMBER));
+      } // endfor n
+    } // endfor ifr
+  } // endfor m
+
+} // end RadIntegrator::CalPolSrc
+
+
+
+/*************** Modifications for Polarization ***************/

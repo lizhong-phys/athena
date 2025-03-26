@@ -38,6 +38,17 @@ enum {IER=0, IFR1=1, IFR2=2, IFR3=3, IPR11=4, IPR22=5, IPR33=6, IPR12=7,
 
 enum {OPAS=0, OPAA=1, OPAP=2}; // scattering, absorption, Planck, opacity
 
+/***** modifications for polarization *****/
+// Moment array indices for 23-moment closure
+// note: this sequence makes the coefficent matrix into a diagnoal block matrix in isotropic condition
+enum {MJI=0, MKI33=1, MJQ=2, MKQ33=3,
+      MKI11=4, MKI22=5, MKQ11=6, MKQ22=7,
+      MPQC=8, MPUZS=9, MKI12=10, MKQ12=11,
+      MPQS=12, MPUZC=13, MKI13=14, MKQ13=15,
+      MHU2=16, MKI23=17, MKQ23=18,
+      MHU1=19, MHV1=20, MHV2=21, MHV3=22};
+/***** modifications for polarization *****/
+
 class NRRadiation {
   friend class RadIntegrator;
   friend class Mesh;
@@ -51,7 +62,7 @@ class NRRadiation {
   AthenaArray<Real> rad_mom; // frequency integrated radiation moments
   AthenaArray<Real> rad_mom_cm; // co-moving frame Er, Frx, Fry, Frz
   AthenaArray<Real> rad_mom_nu, rad_mom_cm_nu; // multi_group radiation moments
-  AthenaArray<Real> sigma_s, sigma_a; //   opacity
+  AthenaArray<Real> sigma_s, sigma_a; // opacity
                   //scattering and fluxes weighted Rosseland mean
   AthenaArray<Real> sigma_p, sigma_pe;
                   // Planck mean and radiation energy weighted mean
@@ -165,6 +176,8 @@ class NRRadiation {
   AthenaArray<Real> rad_pol_mom, rad_full_mom_cm, rad_spec_mom_cm;
   void CalculateFullMoment(AthenaArray<Real> &ir_in);
   void CalculateFullComMoment();
+  bool tst_tgas_ini_guess=false;
+  bool refine_pol_coeff=false;
   /***** modifications for polarization *****/
 
  private:
