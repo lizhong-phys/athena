@@ -37,6 +37,9 @@
 #include "radiation.hpp"
 // constructor, initializes data structures and parameters
 
+// Lebedev table
+#include "lebedev_119.h"
+
 // The default opacity function.
 // Do nothing. Keep the opacity as the initial value
 inline void DefaultFrequency(NRRadiation *prad) {
@@ -304,6 +307,18 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
     rad_pol_mom.NewAthenaArray((num_stokes-1)*num_moments_per_stok,nc3,nc2,nc1); // 4-rank moment tensor for Q, U, V
     rad_full_mom_cm.NewAthenaArray(num_stokes*num_moments_per_stok,nc3,nc2,nc1); // 4-rank moment tensor for I, Q, U, V
     rad_spec_mom_cm.NewAthenaArray(num_spec_moments_in_tot,nc3,nc2,nc1); // PQ^c, PQ^s, PU^zc, PU^zs
+    // initialize angles and weight in Lebedev quadrature
+    if (refine_pol_coeff) {
+      nang_lbd = pin->GetOrAddInteger("radiation", "nang_lbd", nang_lebedev);
+      mu_lbd.NewAthenaArray(3,nang_lbd);
+      wmu_lbd.NewAthenaArray(nang_lbd);
+      for (int n=0; n<nang_lbd; ++n) {
+          mu_lbd(0,n) = lebedev_wxyz[n][0];
+          mu_lbd(1,n) = lebedev_wxyz[n][1];
+          mu_lbd(2,n) = lebedev_wxyz[n][2];
+          mu_lbd(3,n) = lebedev_wxyz[n][3];
+      } // endfor n
+    } // endif refine_pol_coeff
   }
   /*************** modifications for polarization ***************/
 

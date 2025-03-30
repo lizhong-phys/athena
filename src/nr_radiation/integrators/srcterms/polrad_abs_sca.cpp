@@ -45,11 +45,14 @@
 void RadIntegrator::CalPolAux(
       AthenaArray<Real> &wmu_cm, AthenaArray<Real> &tran_coef,
       AthenaArray<Real> &nx_cm, AthenaArray<Real> &ny_cm, AthenaArray<Real> &nz_cm,
+      AthenaArray<Real> &wmu_cm_lbd, AthenaArray<Real> &tran_coef_lbd,
+      AthenaArray<Real> &nx_cm_lbd, AthenaArray<Real> &ny_cm_lbd, AthenaArray<Real> &nz_cm_lbd,
       Real *sigma_a, Real *sigma_p, Real *sigma_pe, Real *sigma_s,
       Real dt, AthenaArray<Real> &ir_cm) {
 
   // parameters
   bool& refine_pol_coeff_ = pmy_rad->refine_pol_coeff;
+  const int& nang_lbd = pmy_rad->nang_lbd;
   const int& nang  = pmy_rad->nang;
   const int& nfreq = pmy_rad->nfreq;
   Real cdt = dt * pmy_rad->crat;
@@ -71,6 +74,11 @@ void RadIntegrator::CalPolAux(
   Real *ny  = &(ny_cm(0));
   Real *nz  = &(nz_cm(0));
   Real *coef_l = &(tran_coef(0));
+  Real *wmu_lbd = &(wmu_cm_lbd(0));
+  Real *nx_lbd  = &(nx_cm_lbd(0));
+  Real *ny_lbd  = &(ny_cm_lbd(0));
+  Real *nz_lbd  = &(nz_cm_lbd(0));
+  Real *coef_l_lbd = &(tran_coef_lbd(0));
   for (int ifr=0; ifr<nfreq; ++ifr) {
     // opacity
     Real chi_r = sigma_a[ifr];  // Rosseland mean absorption
@@ -107,8 +115,13 @@ void RadIntegrator::CalPolAux(
       Real fac_bq = fac * wmu[n] * sq_cm[n];
       Real fac_bu = fac * wmu[n] * su_cm[n];
       Real fac_bv = fac * wmu[n] * sv_cm[n];
-      Real nc  = (SQR(nx[n]) - SQR(ny[n])) / (SQR(nx[n]) + SQR(ny[n]));
-      Real ns  = 2 * nx[n] * ny[n] / (SQR(nx[n]) + SQR(ny[n]));
+      Real sum_nx2ny2 = SQR(nx[n]) + SQR(ny[n]);
+      Real nc = 1.0; Real ns = 0.0; // corresponding to phi=0 along the pole
+      if (sum_nx2ny2 > 0) {
+        nc  = (SQR(nx[n]) - SQR(ny[n])) / sum_nx2ny2;
+        ns  = 2 * nx[n] * ny[n] / sum_nx2ny2;
+      }
+      Real nc_adhoc = (sum_nx2ny2==0) ? 0.0 : nc; // use nc=0 along the pole to minimize truncation errors in Ac and Azzc
 
       // Vector B for 23-moment closure:
       // (MJI, MKI11, MKI22, MKI33, MKI12, MKI13, MKI23)
@@ -168,14 +181,14 @@ void RadIntegrator::CalPolAux(
         hol_Axxyz += fac_a * nx[n] * nx[n] * ny[n] * nz[n];
         hol_Axyyz += fac_a * nx[n] * ny[n] * ny[n] * nz[n];
         hol_Axyzz += fac_a * nx[n] * ny[n] * nz[n] * nz[n];
-        hol_Ac    += fac_a * nc;
+        hol_Ac    += fac_a * nc_adhoc;
         hol_As    += fac_a * ns;
         hol_Acc   += fac_a * nc    * nc;
         hol_Ass   += fac_a * ns    * ns;
         hol_Acs   += fac_a * nc    * ns;
         hol_Axxc  += fac_a * nx[n] * nx[n] * nc;
         hol_Ayyc  += fac_a * ny[n] * ny[n] * nc;
-        hol_Azzc  += fac_a * nz[n] * nz[n] * nc;
+        hol_Azzc  += fac_a * nz[n] * nz[n] * nc_adhoc;
         hol_Axxs  += fac_a * nx[n] * nx[n] * ns;
         hol_Ayys  += fac_a * ny[n] * ny[n] * ns;
         hol_Azzs  += fac_a * nz[n] * nz[n] * ns;
@@ -190,6 +203,64 @@ void RadIntegrator::CalPolAux(
         hol_Azzss += fac_a * nz[n] * nz[n] * ns    * ns;
       } // endif (!refine_pol_coeff_)
     } // endfor n
+
+    // Compute unique moments in vector A and matrix M_coeff using Lebedev quadrature
+    if (refine_pol_coeff_) {
+      for (int n=0; n<nang_lbd; n++) {
+        Real sum_nx2ny2 = SQR(nx_lbd[n]) + SQR(ny_lbd[n]);
+        Real nc_lbd = 1.0; Real ns_lbd = 0.0; // corresponding to phi=0 along the pole
+        if (sum_nx2ny2 > 0) {
+          nc_lbd = (SQR(nx_lbd[n]) - SQR(ny_lbd[n])) / sum_nx2ny2;
+          ns_lbd = 2 * nx_lbd[n] * ny_lbd[n] / sum_nx2ny2;
+        }
+        Real nc_adhoc_lbd = (sum_nx2ny2==0) ? 0.0 : nc_lbd; // use nc=0 along the pole to minimize truncation errors in Ac and Azzc
+
+        Real fac = 1. / (1.0 + coef_l_lbd[n]*cdt*chi_f);
+        Real fac_a = fac * coef_l_lbd[n]*wmu_lbd[n]*cdt;
+        hol_A     += fac_a;
+        hol_Axx   += fac_a * nx_lbd[n] * nx_lbd[n];
+        hol_Ayy   += fac_a * ny_lbd[n] * ny_lbd[n];
+        hol_Azz   += fac_a * nz_lbd[n] * nz_lbd[n];
+        hol_Axy   += fac_a * nx_lbd[n] * ny_lbd[n];
+        hol_Axz   += fac_a * nx_lbd[n] * nz_lbd[n];
+        hol_Ayz   += fac_a * ny_lbd[n] * nz_lbd[n];
+        hol_Axxxx += fac_a * nx_lbd[n] * nx_lbd[n] * nx_lbd[n] * nx_lbd[n];
+        hol_Ayyyy += fac_a * ny_lbd[n] * ny_lbd[n] * ny_lbd[n] * ny_lbd[n];
+        hol_Azzzz += fac_a * nz_lbd[n] * nz_lbd[n] * nz_lbd[n] * nz_lbd[n];
+        hol_Axxyy += fac_a * nx_lbd[n] * nx_lbd[n] * ny_lbd[n] * ny_lbd[n];
+        hol_Axxzz += fac_a * nx_lbd[n] * nx_lbd[n] * nz_lbd[n] * nz_lbd[n];
+        hol_Ayyzz += fac_a * ny_lbd[n] * ny_lbd[n] * nz_lbd[n] * nz_lbd[n];
+        hol_Axxxy += fac_a * nx_lbd[n] * nx_lbd[n] * nx_lbd[n] * ny_lbd[n];
+        hol_Axxxz += fac_a * nx_lbd[n] * nx_lbd[n] * nx_lbd[n] * nz_lbd[n];
+        hol_Axyyy += fac_a * nx_lbd[n] * ny_lbd[n] * ny_lbd[n] * ny_lbd[n];
+        hol_Ayyyz += fac_a * ny_lbd[n] * ny_lbd[n] * ny_lbd[n] * nz_lbd[n];
+        hol_Axzzz += fac_a * nx_lbd[n] * nz_lbd[n] * nz_lbd[n] * nz_lbd[n];
+        hol_Ayzzz += fac_a * ny_lbd[n] * nz_lbd[n] * nz_lbd[n] * nz_lbd[n];
+        hol_Axxyz += fac_a * nx_lbd[n] * nx_lbd[n] * ny_lbd[n] * nz_lbd[n];
+        hol_Axyyz += fac_a * nx_lbd[n] * ny_lbd[n] * ny_lbd[n] * nz_lbd[n];
+        hol_Axyzz += fac_a * nx_lbd[n] * ny_lbd[n] * nz_lbd[n] * nz_lbd[n];
+        hol_Ac    += fac_a * nc_adhoc_lbd;
+        hol_As    += fac_a * ns_lbd;
+        hol_Acc   += fac_a * nc_lbd    * nc_lbd;
+        hol_Ass   += fac_a * ns_lbd    * ns_lbd;
+        hol_Acs   += fac_a * nc_lbd    * ns_lbd;
+        hol_Axxc  += fac_a * nx_lbd[n] * nx_lbd[n] * nc_lbd;
+        hol_Ayyc  += fac_a * ny_lbd[n] * ny_lbd[n] * nc_lbd;
+        hol_Azzc  += fac_a * nz_lbd[n] * nz_lbd[n] * nc_adhoc_lbd;
+        hol_Axxs  += fac_a * nx_lbd[n] * nx_lbd[n] * ns_lbd;
+        hol_Ayys  += fac_a * ny_lbd[n] * ny_lbd[n] * ns_lbd;
+        hol_Azzs  += fac_a * nz_lbd[n] * nz_lbd[n] * ns_lbd;
+        hol_Axyc  += fac_a * nx_lbd[n] * ny_lbd[n] * nc_lbd;
+        hol_Axzc  += fac_a * nx_lbd[n] * nz_lbd[n] * nc_lbd;
+        hol_Ayzc  += fac_a * ny_lbd[n] * nz_lbd[n] * nc_lbd;
+        hol_Axys  += fac_a * nx_lbd[n] * ny_lbd[n] * ns_lbd;
+        hol_Axzs  += fac_a * nx_lbd[n] * nz_lbd[n] * ns_lbd;
+        hol_Ayzs  += fac_a * ny_lbd[n] * nz_lbd[n] * ns_lbd;
+        hol_Azzcc += fac_a * nz_lbd[n] * nz_lbd[n] * nc_lbd    * nc_lbd;
+        hol_Azzcs += fac_a * nz_lbd[n] * nz_lbd[n] * nc_lbd    * ns_lbd;
+        hol_Azzss += fac_a * nz_lbd[n] * nz_lbd[n] * ns_lbd    * ns_lbd;
+      } // endfor n
+    } // endelse (refine_pol_coeff_)
 
     // Vector A for 23-moment closure:
     // (MJI, MKI11, MKI22, MKI33, MKI12, MKI13, MKI23)

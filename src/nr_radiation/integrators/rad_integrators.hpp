@@ -184,8 +184,11 @@ class RadIntegrator {
 
   void CalPolAux(AthenaArray<Real> &wmu_cm, AthenaArray<Real> &tran_coef,
                  AthenaArray<Real> &nx_cm, AthenaArray<Real> &ny_cm, AthenaArray<Real> &nz_cm,
+                 AthenaArray<Real> &wmu_cm_lbd, AthenaArray<Real> &tran_coef_lbd,
+                 AthenaArray<Real> &nx_cm_lbd, AthenaArray<Real> &ny_cm_lbd, AthenaArray<Real> &nz_cm_lbd,
                  Real *sigma_a, Real *sigma_p, Real *sigma_pe, Real *sigma_s,
                  Real dt, AthenaArray<Real> &ir_cm);
+                 
   /***** modifications for polarization *****/
 
  private:
@@ -260,6 +263,7 @@ class RadIntegrator {
   /***** modifications for polarization *****/
   AthenaArray<Real> pol_mom_, polVecA_, polVecB_, M_coeff_, M_inv_;
   AthenaArray<Real> nx_cm_, ny_cm_, nz_cm_;
+  AthenaArray<Real> wmu_cm_lbd_, nx_cm_lbd_, ny_cm_lbd_, nz_cm_lbd_, tran_coef_lbd_;
   /***** modifications for polarization *****/
 };
 

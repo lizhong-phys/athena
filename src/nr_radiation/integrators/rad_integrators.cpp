@@ -199,7 +199,16 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
     nx_cm_.NewAthenaArray(nang);
     ny_cm_.NewAthenaArray(nang);
     nz_cm_.NewAthenaArray(nang);
-  }
+    // comoving angles and weight in Lebedev quadrature
+    if (prad->refine_pol_coeff) {
+      int nang_lbd = prad->nang_lbd;
+      wmu_cm_lbd_.NewAthenaArray(nang_lbd);
+      nx_cm_lbd_.NewAthenaArray(nang_lbd);
+      ny_cm_lbd_.NewAthenaArray(nang_lbd);
+      nz_cm_lbd_.NewAthenaArray(nang_lbd);
+      tran_coef_lbd_.NewAthenaArray(nang_lbd);
+    } // endif (prad->refine_pol_coeff)
+  } // endif (prad->use_pol_rad)
   /***** modifications for polarization *****/
 
   //----------------------------------------------------

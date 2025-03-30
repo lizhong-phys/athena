@@ -178,6 +178,8 @@ class NRRadiation {
   void CalculateFullComMoment();
   bool tst_tgas_ini_guess=false;
   bool refine_pol_coeff=false;
+  int nang_lbd;
+  AthenaArray<Real> mu_lbd, wmu_lbd; // angles and weight in Lebedev quadrature
   /***** modifications for polarization *****/
 
  private:

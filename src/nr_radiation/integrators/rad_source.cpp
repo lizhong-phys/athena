@@ -590,6 +590,7 @@ void RadIntegrator::CalPolSrc(MeshBlock *pmb, const Real dt,
                               AthenaArray<Real> &ir_ini, AthenaArray<Real> &ir) {
   NRRadiation *prad=pmb->pnrrad;
   Real invcrat = 1.0/prad->crat;
+  bool& refine_pol_coeff_ = prad->refine_pol_coeff;
 
   Real *lab_ir;
   Real *sigma_at, *sigma_s, *sigma_p, *sigma_pe;
@@ -606,6 +607,12 @@ void RadIntegrator::CalPolSrc(MeshBlock *pmb, const Real dt,
   AthenaArray<Real> &tran_coef = tran_coef_;
   AthenaArray<Real> &ir_cm = ir_cm_;
   AthenaArray<Real> &cm_to_lab = cm_to_lab_;
+
+  AthenaArray<Real> &wmu_cm_lbd = wmu_cm_lbd_;
+  AthenaArray<Real> &nx_cm_lbd  = nx_cm_lbd_;
+  AthenaArray<Real> &ny_cm_lbd  = ny_cm_lbd_;
+  AthenaArray<Real> &nz_cm_lbd  = nz_cm_lbd_;
+  AthenaArray<Real> &tran_coef_lbd = tran_coef_lbd_;
 
   // For relativistic MHD, do variable inversion first
   // and then assign fluid quantities
@@ -629,7 +636,7 @@ void RadIntegrator::CalPolSrc(MeshBlock *pmb, const Real dt,
     Real vdotn = vx * prad->mu(0,k,j,i,n) + vy * prad->mu(1,k,j,i,n) + vz * prad->mu(2,k,j,i,n);
     Real vnc = 1.0 - vdotn * invcrat;
     tran_coef(n) = lorz * vnc; // hollow-L in LZ's notes
-    wmu_cm(n) = prad->wmu(n)/(tran_coef(n) * tran_coef(n));
+    wmu_cm(n) = prad->wmu(n)/SQR(tran_coef(n));
     numsum += wmu_cm(n);
     cm_to_lab(n) = SQR(SQR(tran_coef(n)));
     // comving directions
@@ -646,6 +653,30 @@ void RadIntegrator::CalPolSrc(MeshBlock *pmb, const Real dt,
     wmu_cm(n) *= numsum;
   }
 
+  // Prepare the transformation coefficients in Lebedev quadrature
+  if (refine_pol_coeff_) {
+    const int &nang_lbd = prad->nang_lbd;
+    numsum = 0.0;
+    for (int n=0; n<nang_lbd; ++n) {
+      Real vdotn = vx * prad->mu_lbd(0,n) + vy * prad->mu_lbd(1,n) + vz * prad->mu_lbd(2,n);
+      Real vnc = 1.0 - vdotn * invcrat;
+      tran_coef_lbd(n) = lorz * vnc; // hollow-L in LZ's notes
+      wmu_cm_lbd(n) = prad->wmu_lbd(n)/SQR(tran_coef_lbd(n));
+      numsum += wmu_cm_lbd(n);
+      // comving directions
+      Real angcoef = lorz * invcrat * (1.0 - lorz * vdotn * invcrat/(1.0+lorz));
+      Real incoef  = 1.0 / (lorz * vnc);
+      nx_cm_lbd(n) = (prad->mu_lbd(0,n) - vx * angcoef) * incoef;
+      ny_cm_lbd(n) = (prad->mu_lbd(1,n) - vy * angcoef) * incoef;
+      nz_cm_lbd(n) = (prad->mu_lbd(2,n) - vz * angcoef) * incoef;
+    }
+
+    numsum = 1.0/numsum;
+    for (int n=0; n<nang_lbd; ++n) {
+      wmu_cm_lbd(n) *= numsum;
+    }
+  } // endif refine_pol_coeff_
+
   // Perform frame transformation for Stokes parameters
   for (int m=0; m<nstok; ++m) {
     for (int ifr=0; ifr<nfreq; ++ifr) {
@@ -660,6 +691,7 @@ void RadIntegrator::CalPolSrc(MeshBlock *pmb, const Real dt,
 
   // Compute auxiliary coefficents
   CalPolAux(wmu_cm, tran_coef, nx_cm, ny_cm, nz_cm,
+            wmu_cm_lbd, tran_coef_lbd, nx_cm_lbd, ny_cm_lbd, nz_cm_lbd,
             sigma_at, sigma_p, sigma_pe, sigma_s, dt, ir_cm);
 
   // Add absorption and scattering opacity source
