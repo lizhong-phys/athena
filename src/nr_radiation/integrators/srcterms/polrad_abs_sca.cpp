@@ -734,9 +734,6 @@ Real RadIntegrator::PolAbsScat(
     Real dt, Real lorz, Real rho, Real &tgas, AthenaArray<Real> &ir_cm) {
 
   /*************** Step 0: Prepare Auxiliary for Computation ***************/
-  Real tol = 1e-12;
-  Real num_max_itr = 50;
-  bool& tst_tgas_ini_guess_ = pmy_rad->tst_tgas_ini_guess;
   const Real& prat  = pmy_rad->prat;
   const int&  nang  = pmy_rad->nang;
   const int&  nfreq = pmy_rad->nfreq;
@@ -758,11 +755,11 @@ Real RadIntegrator::PolAbsScat(
 
   // start iteration on frequeny (only have one for current polarized radiation)
   bool badcell=false;
-  Real tgas_guess = tgas; Real tgas_new = tgas;
+  Real tgas_new = tgas;
   Real coef[2];
   coef[0] = 0.0; coef[1] = 0.0;
   for (int ifr=0; ifr<nfreq; ++ifr) {
-    /*************** Step 1: Initial Guess of Gas Temperature ***************/
+    /*************** Step 1: Update Gas Temperature ***************/
     // opacities
     Real chi_r = sigma_a[ifr];  // Rosseland mean absorption
     Real chi_s = sigma_s[ifr];  // Scattering
@@ -774,177 +771,356 @@ Real RadIntegrator::PolAbsScat(
     Real *sq_cm  = &(ir_cm(1,nang*ifr));
     Real *su_cm  = &(ir_cm(2,nang*ifr));
     Real *sv_cm  = &(ir_cm(3,nang*ifr));
-    Real c1_sum=0.0, c2_sum=0.0, j0_prev=0.0;
+    Real j0_prev=0.0;
     for (int n=0; n<nang; n++) {
-      Real fac = 1.0 / (1.0 + coef_l[n]*cdt*(chi_r+chi_s));
-      c1_sum  += fac * coef_l[n] * wmu[n] * cdt;
-      c2_sum  += fac * wmu[n] * si_cm[n];
       j0_prev += wmu[n] * si_cm[n];
     }
-    Real c3_sum = 1.0 / (1.0 - c1_sum*(chi_r+chi_s-chi_p));
+
+    // compute coefficents
+    InverseMatrix(23, M_coeff_, M_inv_);
+    Real coeff_a=0; Real coeff_b=0;
+    for (int m=0; m<23; ++m) {
+      coeff_b += M_inv_(0,m) * polVecB_(m);
+      coeff_a += M_inv_(0,m) * polVecA_(m);
+    }
+    coeff_a *= chi_p;
 
     // solve the temperature equation
-    coef[1] = prat * gm1/rho * c3_sum*c1_sum*chi_p;
-    coef[0] = -tgas + prat * gm1/rho * (c3_sum*c2_sum - j0_prev);
+    coef[1] = prat * gm1/rho * coeff_a;
+    coef[0] = -tgas + prat * gm1/rho * (coeff_b - j0_prev);
     if (std::abs(coef[1]) > TINY_NUMBER) {
-      int flag = FouthPolyRoot(coef[1], coef[0], tgas_guess);
-      if (flag == -1 || (tgas_guess != tgas_guess)) {
+      int flag = FouthPolyRoot(coef[1], coef[0], tgas_new);
+      if (flag == -1 || (tgas_new != tgas_new)) {
         badcell = true;
-        tgas_guess = tgas;
+        tgas_new = tgas;
       }
     } else {
-      tgas_guess = -coef[0];
+      tgas_new = -coef[0];
     } // endelse (std::abs(coef[1]) > TINY_NUMBER)
 
-    // if only test temperature initial guess, reset co-moving I
-    if (tst_tgas_ini_guess_ && !badcell) {
-      Real tgas4 = SQR(SQR(tgas_guess));
-      Real j0_new = c3_sum * (c1_sum*chi_p*tgas4 + c2_sum);
-      // update the co-moving frame specific intensity
-      for (int n=0; n<nang; n++) {
-        Real fac1 = 1.0 / (1.0 + coef_l[n]*cdt*(chi_r+chi_s));
-        Real fac2 = fac1*coef_l[n]*cdt;
-        si_cm[n] = fac1*si_cm[n];
-        si_cm[n] += fac2 * (chi_p*tgas4 + (chi_r+chi_s-chi_p)*j0_new);
-        si_cm[n] = std::max(si_cm[n],static_cast<Real>(TINY_NUMBER));
+    /*************** Step 2: Update Moments and Stokes Parameters in Fluid Frame ***************/
+    // update necessary moments in fluid frame
+    for (int m=0; m<23; ++m) {
+      pol_mom_(m) = 0.0;
+      for (int n=0; n<23; ++n) {
+        pol_mom_(m) += M_inv_(m,n)*polVecB_(n);
+        pol_mom_(m) += M_inv_(m,n)*polVecA_(n)*chi_p*SQR(SQR(tgas_new));
       } // endfor n
-      tgas_new = tgas_guess;
-    } else {
-      /*************** Step 2: Newton-Raphson Iteration to Update Gas Temperature ***************/
-      // compute coefficents
-      InverseMatrix(23, M_coeff_, M_inv_);
-      Real coeff_a=0; Real coeff_b=0;
-      for (int m=0; m<23; ++m) {
-        coeff_b += M_inv_(0,m) * polVecB_(m);
-        coeff_a += M_inv_(0,m) * polVecA_(m);
-      }
-      coeff_a *= chi_p;
+    } // endfor m
 
-      // update gas temperature
-      Real func, dfunc, tgas_1;
-      Real tgas_0 = tgas_guess;
-      Real j0_update = coeff_b + coeff_a*SQR(SQR(tgas_0));
-      int count; Real l1_err = 1.0;
-      for (count=0; count<num_max_itr; ++count) {
-        func = rho/gm1*(tgas_0-tgas) + prat*(j0_update-j0_prev);
-        dfunc = rho/gm1 + 4*prat*coeff_a*(tgas_0*tgas_0*tgas_0);
-        tgas_1 = tgas_0 - func/dfunc;
-        l1_err = fabs(tgas_1-tgas_0);
-        tgas_0 = tgas_1;
-        j0_update = coeff_b + coeff_a*SQR(SQR(tgas_0));
-        if (tgas_0 < TINY_NUMBER) { // unphysical value
-          badcell = true;
-          break;
-        }
-        if (l1_err < tol) // solution converged
-          break;
-      } // endfor m
-      if (count==num_max_itr) badcell=true; // not converging
-      if (badcell) tgas_0 = tgas_guess; // fix the temperature using the initial guess
+    // update stokes parameters in fluid frame
+    for (int n=0; n<nang; ++n) {
+      Real fac = 1.0 / (1.0 + coef_l[n]*cdt*(chi_r+chi_s));
+      Real fac_p = chi_p*fac*coef_l[n]*cdt;
+      Real fac_s = 0.75*chi_s*fac*coef_l[n]*cdt;
+      Real nc = (SQR(nx[n]) - SQR(ny[n])) / (SQR(nx[n]) + SQR(ny[n]));
+      Real ns = 2 * nx[n] * ny[n] / (SQR(nx[n]) + SQR(ny[n]));
+      Real terms_in_bracket_i=0;
+      Real terms_in_bracket_q=0;
+      Real terms_in_bracket_u=0;
+      Real terms_in_bracket_v=0;
 
-      // updated temperature
-      tgas_new = tgas_0;
+      // update I
+      terms_in_bracket_i += pol_mom_(MJI);
+      terms_in_bracket_i += pol_mom_(MKI11) * nx[n] * nx[n];
+      terms_in_bracket_i += pol_mom_(MKI22) * ny[n] * ny[n];
+      terms_in_bracket_i += pol_mom_(MKI33) * nz[n] * nz[n];
+      terms_in_bracket_i += pol_mom_(MKI12) * nx[n] * ny[n] * 2;
+      terms_in_bracket_i += pol_mom_(MKI13) * nx[n] * nz[n] * 2;
+      terms_in_bracket_i += pol_mom_(MKI23) * ny[n] * nz[n] * 2;
+      terms_in_bracket_i += pol_mom_(MJQ)   * nz[n] * nz[n] * (-1);
+      terms_in_bracket_i += pol_mom_(MKQ11) * nx[n] * nx[n];
+      terms_in_bracket_i += pol_mom_(MKQ22) * ny[n] * ny[n];
+      terms_in_bracket_i += pol_mom_(MKQ33) * nz[n] * nz[n];
+      terms_in_bracket_i += pol_mom_(MKQ12) * nx[n] * ny[n] * 2;
+      terms_in_bracket_i += pol_mom_(MKQ13) * nx[n] * nz[n] * 2;
+      terms_in_bracket_i += pol_mom_(MKQ23) * ny[n] * nz[n] * 2;
+      terms_in_bracket_i += pol_mom_(MPQC)  * (SQR(ny[n]) - SQR(nx[n]));
+      terms_in_bracket_i += pol_mom_(MPQS)  * nx[n] * ny[n] * (-2);
+      terms_in_bracket_i += pol_mom_(MHU1)  * ny[n] * nz[n] * 2;
+      terms_in_bracket_i += pol_mom_(MHU2)  * nx[n] * nz[n] * (-2);
+      terms_in_bracket_i += pol_mom_(MPUZC) * nx[n] * ny[n] * (-2);
+      terms_in_bracket_i += pol_mom_(MPUZS) * (SQR(nx[n]) - SQR(ny[n]));
+      si_cm[n] *= fac;
+      si_cm[n] += fac_p * SQR(SQR(tgas_new));
+      si_cm[n] += fac_s * terms_in_bracket_i;
 
-      /*************** Step 3: Update Moments and Stokes Parameters in Fluid Frame ***************/
-      // update necessary moments in fluid frame
-      for (int m=0; m<23; ++m) {
-        pol_mom_(m) = 0.0;
-        for (int n=0; n<23; ++n) {
-          pol_mom_(m) += M_inv_(m,n)*polVecB_(n);
-          pol_mom_(m) += M_inv_(m,n)*polVecA_(n)*chi_p*SQR(SQR(tgas_new));
-        } // endfor n
-      } // endfor m
+      // update Q
+      terms_in_bracket_q += pol_mom_(MKI11) * (SQR(nx[n]) - nc);
+      terms_in_bracket_q += pol_mom_(MKI22) * (SQR(ny[n]) + nc);
+      terms_in_bracket_q += pol_mom_(MKI33) * (SQR(nz[n]) - 1);
+      terms_in_bracket_q += pol_mom_(MKI12) * (nx[n]*ny[n] - ns) * 2;
+      terms_in_bracket_q += pol_mom_(MKI13) * nx[n] * nz[n] * 2;
+      terms_in_bracket_q += pol_mom_(MKI23) * ny[n] * nz[n] * 2;
+      terms_in_bracket_q += pol_mom_(MJQ)   * (1 - SQR(nz[n]));
+      terms_in_bracket_q += pol_mom_(MKQ11) * (SQR(nx[n]) - nc);
+      terms_in_bracket_q += pol_mom_(MKQ22) * (SQR(ny[n]) + nc);
+      terms_in_bracket_q += pol_mom_(MKQ33) * (SQR(nz[n]) - 1);
+      terms_in_bracket_q += pol_mom_(MKQ12) * (nx[n]*ny[n] - ns) * 2;
+      terms_in_bracket_q += pol_mom_(MKQ13) * nx[n] * nz[n] * 2;
+      terms_in_bracket_q += pol_mom_(MKQ23) * ny[n] * nz[n] * 2;
+      terms_in_bracket_q += pol_mom_(MPQC)   * (2*nc - SQR(nx[n]) + SQR(ny[n]));
+      terms_in_bracket_q += pol_mom_(MPQS)   * (ns - nx[n]*ny[n]) * 2;
+      terms_in_bracket_q += pol_mom_(MHU1)  * ny[n] * nz[n] * 2;
+      terms_in_bracket_q += pol_mom_(MHU2)  * nx[n] * nz[n] * (-2);
+      terms_in_bracket_q += pol_mom_(MPUZC) * (ns - nx[n]*ny[n]) * 2;
+      terms_in_bracket_q += pol_mom_(MPUZS) * (-2*nc + SQR(nx[n]) - SQR(ny[n]));
+      sq_cm[n] *= fac;
+      sq_cm[n] += fac_s * terms_in_bracket_q;
 
-      // update stokes parameters in fluid frame
-      for (int n=0; n<nang; ++n) {
-        Real fac = 1.0 / (1.0 + coef_l[n]*cdt*(chi_r+chi_s));
-        Real fac_p = chi_p*fac*coef_l[n]*cdt;
-        Real fac_s = 0.75*chi_s*fac*coef_l[n]*cdt;
-        Real nc = (SQR(nx[n]) - SQR(ny[n])) / (SQR(nx[n]) + SQR(ny[n]));
-        Real ns = 2 * nx[n] * ny[n] / (SQR(nx[n]) + SQR(ny[n]));
-        Real terms_in_bracket_i=0;
-        Real terms_in_bracket_q=0;
-        Real terms_in_bracket_u=0;
-        Real terms_in_bracket_v=0;
+      // update U
+      terms_in_bracket_u += pol_mom_(MKI11) * nz[n] * ns;
+      terms_in_bracket_u += pol_mom_(MKI22) * nz[n] * ns * (-1);
+      terms_in_bracket_u += pol_mom_(MKI12) * nz[n] * nc * (-2);
+      terms_in_bracket_u += pol_mom_(MKI13) * ny[n] * (-2);
+      terms_in_bracket_u += pol_mom_(MKI23) * nx[n] * 2;
+      terms_in_bracket_u += pol_mom_(MKQ11) * nz[n] * ns;
+      terms_in_bracket_u += pol_mom_(MKQ22) * nz[n] * ns * (-1);
+      terms_in_bracket_u += pol_mom_(MKQ12) * nz[n] * nc * (-2);
+      terms_in_bracket_u += pol_mom_(MKQ13) * ny[n] * (-2);
+      terms_in_bracket_u += pol_mom_(MKQ23) * nx[n] * 2;
+      terms_in_bracket_u += pol_mom_(MPQS)   * nz[n] * nc * 2;
+      terms_in_bracket_u += pol_mom_(MPQC)   * nz[n] * ns * (-2);
+      terms_in_bracket_u += pol_mom_(MHU1)  * nx[n] * 2;
+      terms_in_bracket_u += pol_mom_(MHU2)  * ny[n] * 2;
+      terms_in_bracket_u += pol_mom_(MPUZC) * nz[n] * nc * 2;
+      terms_in_bracket_u += pol_mom_(MPUZS) * nz[n] * ns * 2;
+      su_cm[n] *= fac;
+      su_cm[n] += fac_s * terms_in_bracket_u;
 
-        // update I
-        terms_in_bracket_i += pol_mom_(MJI);
-        terms_in_bracket_i += pol_mom_(MKI11) * nx[n] * nx[n];
-        terms_in_bracket_i += pol_mom_(MKI22) * ny[n] * ny[n];
-        terms_in_bracket_i += pol_mom_(MKI33) * nz[n] * nz[n];
-        terms_in_bracket_i += pol_mom_(MKI12) * nx[n] * ny[n] * 2;
-        terms_in_bracket_i += pol_mom_(MKI13) * nx[n] * nz[n] * 2;
-        terms_in_bracket_i += pol_mom_(MKI23) * ny[n] * nz[n] * 2;
-        terms_in_bracket_i += pol_mom_(MJQ)   * nz[n] * nz[n] * (-1);
-        terms_in_bracket_i += pol_mom_(MKQ11) * nx[n] * nx[n];
-        terms_in_bracket_i += pol_mom_(MKQ22) * ny[n] * ny[n];
-        terms_in_bracket_i += pol_mom_(MKQ33) * nz[n] * nz[n];
-        terms_in_bracket_i += pol_mom_(MKQ12) * nx[n] * ny[n] * 2;
-        terms_in_bracket_i += pol_mom_(MKQ13) * nx[n] * nz[n] * 2;
-        terms_in_bracket_i += pol_mom_(MKQ23) * ny[n] * nz[n] * 2;
-        terms_in_bracket_i += pol_mom_(MPQC)  * (SQR(ny[n]) - SQR(nx[n]));
-        terms_in_bracket_i += pol_mom_(MPQS)  * nx[n] * ny[n] * (-2);
-        terms_in_bracket_i += pol_mom_(MHU1)  * ny[n] * nz[n] * 2;
-        terms_in_bracket_i += pol_mom_(MHU2)  * nx[n] * nz[n] * (-2);
-        terms_in_bracket_i += pol_mom_(MPUZC) * nx[n] * ny[n] * (-2);
-        terms_in_bracket_i += pol_mom_(MPUZS) * (SQR(nx[n]) - SQR(ny[n]));
-        si_cm[n] *= fac;
-        si_cm[n] += fac_p * SQR(SQR(tgas_new));
-        si_cm[n] += fac_s * terms_in_bracket_i;
+      // update V
+      terms_in_bracket_v += pol_mom_(MHV1) * nx[n];
+      terms_in_bracket_v += pol_mom_(MHV2) * ny[n];
+      terms_in_bracket_v += pol_mom_(MHV3) * nz[n];
+      sv_cm[n] *= fac;
+      su_cm[n] += fac_s * 2*terms_in_bracket_v;
+    } // endfor n
 
-        // update Q
-        terms_in_bracket_q += pol_mom_(MKI11) * (SQR(nx[n]) - nc);
-        terms_in_bracket_q += pol_mom_(MKI22) * (SQR(ny[n]) + nc);
-        terms_in_bracket_q += pol_mom_(MKI33) * (SQR(nz[n]) - 1);
-        terms_in_bracket_q += pol_mom_(MKI12) * (nx[n]*ny[n] - ns) * 2;
-        terms_in_bracket_q += pol_mom_(MKI13) * nx[n] * nz[n] * 2;
-        terms_in_bracket_q += pol_mom_(MKI23) * ny[n] * nz[n] * 2;
-        terms_in_bracket_q += pol_mom_(MJQ)   * (1 - SQR(nz[n]));
-        terms_in_bracket_q += pol_mom_(MKQ11) * (SQR(nx[n]) - nc);
-        terms_in_bracket_q += pol_mom_(MKQ22) * (SQR(ny[n]) + nc);
-        terms_in_bracket_q += pol_mom_(MKQ33) * (SQR(nz[n]) - 1);
-        terms_in_bracket_q += pol_mom_(MKQ12) * (nx[n]*ny[n] - ns) * 2;
-        terms_in_bracket_q += pol_mom_(MKQ13) * nx[n] * nz[n] * 2;
-        terms_in_bracket_q += pol_mom_(MKQ23) * ny[n] * nz[n] * 2;
-        terms_in_bracket_q += pol_mom_(MPQC)   * (2*nc - SQR(nx[n]) + SQR(ny[n]));
-        terms_in_bracket_q += pol_mom_(MPQS)   * (ns - nx[n]*ny[n]) * 2;
-        terms_in_bracket_q += pol_mom_(MHU1)  * ny[n] * nz[n] * 2;
-        terms_in_bracket_q += pol_mom_(MHU2)  * nx[n] * nz[n] * (-2);
-        terms_in_bracket_q += pol_mom_(MPUZC) * (ns - nx[n]*ny[n]) * 2;
-        terms_in_bracket_q += pol_mom_(MPUZS) * (-2*nc + SQR(nx[n]) - SQR(ny[n]));
-        sq_cm[n] *= fac;
-        sq_cm[n] += fac_s * terms_in_bracket_q;
-
-        // update U
-        terms_in_bracket_u += pol_mom_(MKI11) * nz[n] * ns;
-        terms_in_bracket_u += pol_mom_(MKI22) * nz[n] * ns * (-1);
-        terms_in_bracket_u += pol_mom_(MKI12) * nz[n] * nc * (-2);
-        terms_in_bracket_u += pol_mom_(MKI13) * ny[n] * (-2);
-        terms_in_bracket_u += pol_mom_(MKI23) * nx[n] * 2;
-        terms_in_bracket_u += pol_mom_(MKQ11) * nz[n] * ns;
-        terms_in_bracket_u += pol_mom_(MKQ22) * nz[n] * ns * (-1);
-        terms_in_bracket_u += pol_mom_(MKQ12) * nz[n] * nc * (-2);
-        terms_in_bracket_u += pol_mom_(MKQ13) * ny[n] * (-2);
-        terms_in_bracket_u += pol_mom_(MKQ23) * nx[n] * 2;
-        terms_in_bracket_u += pol_mom_(MPQS)   * nz[n] * nc * 2;
-        terms_in_bracket_u += pol_mom_(MPQC)   * nz[n] * ns * (-2);
-        terms_in_bracket_u += pol_mom_(MHU1)  * nx[n] * 2;
-        terms_in_bracket_u += pol_mom_(MHU2)  * ny[n] * 2;
-        terms_in_bracket_u += pol_mom_(MPUZC) * nz[n] * nc * 2;
-        terms_in_bracket_u += pol_mom_(MPUZS) * nz[n] * ns * 2;
-        su_cm[n] *= fac;
-        su_cm[n] += fac_s * terms_in_bracket_u;
-
-        // update V
-        terms_in_bracket_v += pol_mom_(MHV1) * nx[n];
-        terms_in_bracket_v += pol_mom_(MHV2) * ny[n];
-        terms_in_bracket_v += pol_mom_(MHV3) * nz[n];
-        sv_cm[n] *= fac;
-        su_cm[n] += fac_s * 2*terms_in_bracket_v;
-      } // endfor n
-
-    } // endelse (tst_tgas_ini_guess && !badcell)
   } // endfor ifr
 
   return tgas_new;
 }
+
+
+// use Newton-Raphson scheme
+// Real RadIntegrator::PolAbsScat(
+//     AthenaArray<Real> &wmu_cm, AthenaArray<Real> &tran_coef,
+//     AthenaArray<Real> &nx_cm, AthenaArray<Real> &ny_cm, AthenaArray<Real> &nz_cm,
+//     Real *sigma_a, Real *sigma_p, Real *sigma_pe, Real *sigma_s,
+//     Real dt, Real lorz, Real rho, Real &tgas, AthenaArray<Real> &ir_cm) {
+//
+//   /*************** Step 0: Prepare Auxiliary for Computation ***************/
+//   Real tol = 1e-12;
+//   Real num_max_itr = 50;
+//   bool& tst_tgas_ini_guess_ = pmy_rad->tst_tgas_ini_guess;
+//   const Real& prat  = pmy_rad->prat;
+//   const int&  nang  = pmy_rad->nang;
+//   const int&  nfreq = pmy_rad->nfreq;
+//
+//   // velocity reduction
+//   Real cdt = dt * pmy_rad->crat;
+//   cdt *= pmy_rad->reduced_c/pmy_rad->crat;
+//
+//   // gas adiabatic index
+//   Real gamma = pmy_rad->pmy_block->peos->GetGamma();
+//   Real gm1 = gamma - 1;
+//
+//   // angles and coefficents
+//   Real *wmu = &(wmu_cm(0));
+//   Real *nx  = &(nx_cm(0));
+//   Real *ny  = &(ny_cm(0));
+//   Real *nz  = &(nz_cm(0));
+//   Real *coef_l = &(tran_coef(0));
+//
+//   // start iteration on frequeny (only have one for current polarized radiation)
+//   bool badcell=false;
+//   Real tgas_guess = tgas; Real tgas_new = tgas;
+//   Real coef[2];
+//   coef[0] = 0.0; coef[1] = 0.0;
+//   for (int ifr=0; ifr<nfreq; ++ifr) {
+//     /*************** Step 1: Initial Guess of Gas Temperature ***************/
+//     // opacities
+//     Real chi_r = sigma_a[ifr];  // Rosseland mean absorption
+//     Real chi_s = sigma_s[ifr];  // Scattering
+//     Real chi_p = sigma_p[ifr];  // Planck mean absorption
+//     Real chi_e = sigma_pe[ifr]; // Energy (Planck) mean absorption
+//
+//     // coefficients for temperature equation
+//     Real *si_cm  = &(ir_cm(0,nang*ifr));
+//     Real *sq_cm  = &(ir_cm(1,nang*ifr));
+//     Real *su_cm  = &(ir_cm(2,nang*ifr));
+//     Real *sv_cm  = &(ir_cm(3,nang*ifr));
+//     Real c1_sum=0.0, c2_sum=0.0, j0_prev=0.0;
+//     for (int n=0; n<nang; n++) {
+//       Real fac = 1.0 / (1.0 + coef_l[n]*cdt*(chi_r+chi_s));
+//       c1_sum  += fac * coef_l[n] * wmu[n] * cdt;
+//       c2_sum  += fac * wmu[n] * si_cm[n];
+//       j0_prev += wmu[n] * si_cm[n];
+//     }
+//     Real c3_sum = 1.0 / (1.0 - c1_sum*(chi_r+chi_s-chi_p));
+//
+//     // solve the temperature equation assuming non-polarized radiation
+//     coef[1] = prat * gm1/rho * c3_sum*c1_sum*chi_p;
+//     coef[0] = -tgas + prat * gm1/rho * (c3_sum*c2_sum - j0_prev);
+//     if (std::abs(coef[1]) > TINY_NUMBER) {
+//       int flag = FouthPolyRoot(coef[1], coef[0], tgas_guess);
+//       if (flag == -1 || (tgas_guess != tgas_guess)) {
+//         badcell = true;
+//         tgas_guess = tgas;
+//       }
+//     } else {
+//       tgas_guess = -coef[0];
+//     } // endelse (std::abs(coef[1]) > TINY_NUMBER)
+//
+//     // if only test temperature initial guess, reset co-moving I
+//     if (tst_tgas_ini_guess_ && !badcell) {
+//       Real tgas4 = SQR(SQR(tgas_guess));
+//       Real j0_new = c3_sum * (c1_sum*chi_p*tgas4 + c2_sum);
+//       // update the co-moving frame specific intensity
+//       for (int n=0; n<nang; n++) {
+//         Real fac1 = 1.0 / (1.0 + coef_l[n]*cdt*(chi_r+chi_s));
+//         Real fac2 = fac1*coef_l[n]*cdt;
+//         si_cm[n] = fac1*si_cm[n];
+//         si_cm[n] += fac2 * (chi_p*tgas4 + (chi_r+chi_s-chi_p)*j0_new);
+//         si_cm[n] = std::max(si_cm[n],static_cast<Real>(TINY_NUMBER));
+//       } // endfor n
+//       tgas_new = tgas_guess;
+//     } else {
+//       /*************** Step 2: Newton-Raphson Iteration to Update Gas Temperature ***************/
+//       // compute coefficents
+//       InverseMatrix(23, M_coeff_, M_inv_);
+//       Real coeff_a=0; Real coeff_b=0;
+//       for (int m=0; m<23; ++m) {
+//         coeff_b += M_inv_(0,m) * polVecB_(m);
+//         coeff_a += M_inv_(0,m) * polVecA_(m);
+//       }
+//       coeff_a *= chi_p;
+//
+//       // update gas temperature
+//       Real func, dfunc, tgas_1;
+//       Real tgas_0 = tgas_guess;
+//       Real j0_update = coeff_b + coeff_a*SQR(SQR(tgas_0));
+//       int count; Real l1_err = 1.0;
+//       for (count=0; count<num_max_itr; ++count) {
+//         func = rho/gm1*(tgas_0-tgas) + prat*(j0_update-j0_prev);
+//         dfunc = rho/gm1 + 4*prat*coeff_a*(tgas_0*tgas_0*tgas_0);
+//         tgas_1 = tgas_0 - func/dfunc;
+//         l1_err = fabs(tgas_1-tgas_0);
+//         tgas_0 = tgas_1;
+//         j0_update = coeff_b + coeff_a*SQR(SQR(tgas_0));
+//         if (tgas_0 < TINY_NUMBER) { // unphysical value
+//           badcell = true;
+//           break;
+//         }
+//         if (l1_err < tol) // solution converged
+//           break;
+//       } // endfor m
+//       if (count==num_max_itr) badcell=true; // not converging
+//       if (badcell) tgas_0 = tgas_guess; // fix the temperature using the initial guess
+//
+//       // updated temperature
+//       tgas_new = tgas_0;
+//
+//       /*************** Step 3: Update Moments and Stokes Parameters in Fluid Frame ***************/
+//       // update necessary moments in fluid frame
+//       for (int m=0; m<23; ++m) {
+//         pol_mom_(m) = 0.0;
+//         for (int n=0; n<23; ++n) {
+//           pol_mom_(m) += M_inv_(m,n)*polVecB_(n);
+//           pol_mom_(m) += M_inv_(m,n)*polVecA_(n)*chi_p*SQR(SQR(tgas_new));
+//         } // endfor n
+//       } // endfor m
+//
+//       // update stokes parameters in fluid frame
+//       for (int n=0; n<nang; ++n) {
+//         Real fac = 1.0 / (1.0 + coef_l[n]*cdt*(chi_r+chi_s));
+//         Real fac_p = chi_p*fac*coef_l[n]*cdt;
+//         Real fac_s = 0.75*chi_s*fac*coef_l[n]*cdt;
+//         Real nc = (SQR(nx[n]) - SQR(ny[n])) / (SQR(nx[n]) + SQR(ny[n]));
+//         Real ns = 2 * nx[n] * ny[n] / (SQR(nx[n]) + SQR(ny[n]));
+//         Real terms_in_bracket_i=0;
+//         Real terms_in_bracket_q=0;
+//         Real terms_in_bracket_u=0;
+//         Real terms_in_bracket_v=0;
+//
+//         // update I
+//         terms_in_bracket_i += pol_mom_(MJI);
+//         terms_in_bracket_i += pol_mom_(MKI11) * nx[n] * nx[n];
+//         terms_in_bracket_i += pol_mom_(MKI22) * ny[n] * ny[n];
+//         terms_in_bracket_i += pol_mom_(MKI33) * nz[n] * nz[n];
+//         terms_in_bracket_i += pol_mom_(MKI12) * nx[n] * ny[n] * 2;
+//         terms_in_bracket_i += pol_mom_(MKI13) * nx[n] * nz[n] * 2;
+//         terms_in_bracket_i += pol_mom_(MKI23) * ny[n] * nz[n] * 2;
+//         terms_in_bracket_i += pol_mom_(MJQ)   * nz[n] * nz[n] * (-1);
+//         terms_in_bracket_i += pol_mom_(MKQ11) * nx[n] * nx[n];
+//         terms_in_bracket_i += pol_mom_(MKQ22) * ny[n] * ny[n];
+//         terms_in_bracket_i += pol_mom_(MKQ33) * nz[n] * nz[n];
+//         terms_in_bracket_i += pol_mom_(MKQ12) * nx[n] * ny[n] * 2;
+//         terms_in_bracket_i += pol_mom_(MKQ13) * nx[n] * nz[n] * 2;
+//         terms_in_bracket_i += pol_mom_(MKQ23) * ny[n] * nz[n] * 2;
+//         terms_in_bracket_i += pol_mom_(MPQC)  * (SQR(ny[n]) - SQR(nx[n]));
+//         terms_in_bracket_i += pol_mom_(MPQS)  * nx[n] * ny[n] * (-2);
+//         terms_in_bracket_i += pol_mom_(MHU1)  * ny[n] * nz[n] * 2;
+//         terms_in_bracket_i += pol_mom_(MHU2)  * nx[n] * nz[n] * (-2);
+//         terms_in_bracket_i += pol_mom_(MPUZC) * nx[n] * ny[n] * (-2);
+//         terms_in_bracket_i += pol_mom_(MPUZS) * (SQR(nx[n]) - SQR(ny[n]));
+//         si_cm[n] *= fac;
+//         si_cm[n] += fac_p * SQR(SQR(tgas_new));
+//         si_cm[n] += fac_s * terms_in_bracket_i;
+//
+//         // update Q
+//         terms_in_bracket_q += pol_mom_(MKI11) * (SQR(nx[n]) - nc);
+//         terms_in_bracket_q += pol_mom_(MKI22) * (SQR(ny[n]) + nc);
+//         terms_in_bracket_q += pol_mom_(MKI33) * (SQR(nz[n]) - 1);
+//         terms_in_bracket_q += pol_mom_(MKI12) * (nx[n]*ny[n] - ns) * 2;
+//         terms_in_bracket_q += pol_mom_(MKI13) * nx[n] * nz[n] * 2;
+//         terms_in_bracket_q += pol_mom_(MKI23) * ny[n] * nz[n] * 2;
+//         terms_in_bracket_q += pol_mom_(MJQ)   * (1 - SQR(nz[n]));
+//         terms_in_bracket_q += pol_mom_(MKQ11) * (SQR(nx[n]) - nc);
+//         terms_in_bracket_q += pol_mom_(MKQ22) * (SQR(ny[n]) + nc);
+//         terms_in_bracket_q += pol_mom_(MKQ33) * (SQR(nz[n]) - 1);
+//         terms_in_bracket_q += pol_mom_(MKQ12) * (nx[n]*ny[n] - ns) * 2;
+//         terms_in_bracket_q += pol_mom_(MKQ13) * nx[n] * nz[n] * 2;
+//         terms_in_bracket_q += pol_mom_(MKQ23) * ny[n] * nz[n] * 2;
+//         terms_in_bracket_q += pol_mom_(MPQC)   * (2*nc - SQR(nx[n]) + SQR(ny[n]));
+//         terms_in_bracket_q += pol_mom_(MPQS)   * (ns - nx[n]*ny[n]) * 2;
+//         terms_in_bracket_q += pol_mom_(MHU1)  * ny[n] * nz[n] * 2;
+//         terms_in_bracket_q += pol_mom_(MHU2)  * nx[n] * nz[n] * (-2);
+//         terms_in_bracket_q += pol_mom_(MPUZC) * (ns - nx[n]*ny[n]) * 2;
+//         terms_in_bracket_q += pol_mom_(MPUZS) * (-2*nc + SQR(nx[n]) - SQR(ny[n]));
+//         sq_cm[n] *= fac;
+//         sq_cm[n] += fac_s * terms_in_bracket_q;
+//
+//         // update U
+//         terms_in_bracket_u += pol_mom_(MKI11) * nz[n] * ns;
+//         terms_in_bracket_u += pol_mom_(MKI22) * nz[n] * ns * (-1);
+//         terms_in_bracket_u += pol_mom_(MKI12) * nz[n] * nc * (-2);
+//         terms_in_bracket_u += pol_mom_(MKI13) * ny[n] * (-2);
+//         terms_in_bracket_u += pol_mom_(MKI23) * nx[n] * 2;
+//         terms_in_bracket_u += pol_mom_(MKQ11) * nz[n] * ns;
+//         terms_in_bracket_u += pol_mom_(MKQ22) * nz[n] * ns * (-1);
+//         terms_in_bracket_u += pol_mom_(MKQ12) * nz[n] * nc * (-2);
+//         terms_in_bracket_u += pol_mom_(MKQ13) * ny[n] * (-2);
+//         terms_in_bracket_u += pol_mom_(MKQ23) * nx[n] * 2;
+//         terms_in_bracket_u += pol_mom_(MPQS)   * nz[n] * nc * 2;
+//         terms_in_bracket_u += pol_mom_(MPQC)   * nz[n] * ns * (-2);
+//         terms_in_bracket_u += pol_mom_(MHU1)  * nx[n] * 2;
+//         terms_in_bracket_u += pol_mom_(MHU2)  * ny[n] * 2;
+//         terms_in_bracket_u += pol_mom_(MPUZC) * nz[n] * nc * 2;
+//         terms_in_bracket_u += pol_mom_(MPUZS) * nz[n] * ns * 2;
+//         su_cm[n] *= fac;
+//         su_cm[n] += fac_s * terms_in_bracket_u;
+//
+//         // update V
+//         terms_in_bracket_v += pol_mom_(MHV1) * nx[n];
+//         terms_in_bracket_v += pol_mom_(MHV2) * ny[n];
+//         terms_in_bracket_v += pol_mom_(MHV3) * nz[n];
+//         sv_cm[n] *= fac;
+//         su_cm[n] += fac_s * 2*terms_in_bracket_v;
+//       } // endfor n
+//
+//     } // endelse (tst_tgas_ini_guess && !badcell)
+//   } // endfor ifr
+//
+//   return tgas_new;
+// }

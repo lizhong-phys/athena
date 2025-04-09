@@ -176,7 +176,7 @@ class NRRadiation {
   AthenaArray<Real> rad_pol_mom, rad_full_mom_cm, rad_spec_mom_cm;
   void CalculateFullMoment(AthenaArray<Real> &ir_in);
   void CalculateFullComMoment();
-  bool tst_tgas_ini_guess=false;
+  // bool tst_tgas_ini_guess=false;
   bool refine_pol_coeff=false;
   int nang_lbd;
   AthenaArray<Real> mu_lbd, wmu_lbd; // angles and weight in Lebedev quadrature

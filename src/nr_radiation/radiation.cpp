@@ -281,7 +281,7 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
           << "Stokes parameters are only implicitly updated with source terms" << std::endl;
       ATHENA_ERROR(msg);
     }
-    tst_tgas_ini_guess = pin->GetOrAddBoolean("radiation", "tst_tgas_ini_guess", false);
+    // tst_tgas_ini_guess = pin->GetOrAddBoolean("radiation", "tst_tgas_ini_guess", false);
     refine_pol_coeff = pin->GetOrAddBoolean("radiation", "refine_pol_coeff", false);
     // deconstruct variables
     ir.DeleteAthenaArray();
