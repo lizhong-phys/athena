@@ -823,7 +823,7 @@ Real RadIntegrator::PolAbsScat(
       // update gas temperature
       Real func, dfunc, tgas_1;
       Real tgas_0 = tgas_guess;
-      Real j0_update = coeff_b + coeff_a*tgas_0;
+      Real j0_update = coeff_b + coeff_a*SQR(SQR(tgas_0));
       int count; Real l1_err = 1.0;
       for (count=0; count<num_max_itr; ++count) {
         func = rho/gm1*(tgas_0-tgas) + prat*(j0_update-j0_prev);
@@ -831,7 +831,7 @@ Real RadIntegrator::PolAbsScat(
         tgas_1 = tgas_0 - func/dfunc;
         l1_err = fabs(tgas_1-tgas_0);
         tgas_0 = tgas_1;
-        j0_update = coeff_b + coeff_a*tgas_0;
+        j0_update = coeff_b + coeff_a*SQR(SQR(tgas_0));
         if (tgas_0 < TINY_NUMBER) { // unphysical value
           badcell = true;
           break;
