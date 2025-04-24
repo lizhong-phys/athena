@@ -59,8 +59,7 @@ void RadIntegrator::CalPolAux(
   cdt *= pmy_rad->reduced_c/pmy_rad->crat;
 
   // reset M_coeff_, polVecA_ and polVecB_
-
-  for (int m; m<23; ++m) {
+  for (int m=0; m<23; ++m) {
     polVecA_(m) = 0.0;
     polVecB_(m) = 0.0;
     for (int n; n<23; ++n) {
@@ -108,6 +107,7 @@ void RadIntegrator::CalPolAux(
     Real hol_Axyc  = 0.0; Real hol_Axzc  = 0.0; Real hol_Ayzc  = 0.0;
     Real hol_Axys  = 0.0; Real hol_Axzs  = 0.0; Real hol_Ayzs  = 0.0;
     Real hol_Azzcc = 0.0; Real hol_Azzcs = 0.0; Real hol_Azzss = 0.0;
+
     // angle integration
     for (int n=0; n<nang; n++) {
       Real fac = 1. / (1.0 + coef_l[n]*cdt*chi_f);
@@ -777,7 +777,8 @@ Real RadIntegrator::PolAbsScat(
     }
 
     // compute coefficents
-    InverseMatrix(23, M_coeff_, M_inv_);
+    M_coeff_tmp_ = M_coeff_; // input matrix is going to be modified in LU decomposition process
+    InverseMatrix(23, M_coeff_tmp_, M_inv_);
     Real coeff_a=0; Real coeff_b=0;
     for (int m=0; m<23; ++m) {
       coeff_b += M_inv_(0,m) * polVecB_(m);
@@ -988,7 +989,7 @@ Real RadIntegrator::PolAbsScat(
 //     } else {
 //       /*************** Step 2: Newton-Raphson Iteration to Update Gas Temperature ***************/
 //       // compute coefficents
-//       InverseMatrix(23, M_coeff_, M_inv_);
+//      InverseMatrix(23, M_coeff_, M_inv_);
 //       Real coeff_a=0; Real coeff_b=0;
 //       for (int m=0; m<23; ++m) {
 //         coeff_b += M_inv_(0,m) * polVecB_(m);

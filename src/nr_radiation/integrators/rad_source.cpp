@@ -700,11 +700,6 @@ void RadIntegrator::CalPolSrc(MeshBlock *pmb, const Real dt,
                                 sigma_at, sigma_p, sigma_pe, sigma_s,
                                 dt, lorz, rho, tgas_(k,j,i), ir_cm);
 
-  // TODO: Add compton scattering
-  // if (compton_flag_ > 0) {
-  //   Compton(wmu_cm, tran_coef, sigma_s, dt, lorz, rho, tgas_new_(k,j,i), ir_cm);
-  // }
-
   // update specific intensity in the lab frame
   // do not modify ir_ini
   for (int m=0; m<nstok; ++m) {

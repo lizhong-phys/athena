@@ -193,6 +193,7 @@ RadIntegrator::RadIntegrator(NRRadiation *prad, ParameterInput *pin) {
     polVecA_.NewAthenaArray(23);
     polVecB_.NewAthenaArray(23);
     M_coeff_.NewAthenaArray(23,23);
+    M_coeff_tmp_.NewAthenaArray(23,23);
     M_inv_.NewAthenaArray(23,23);
     pol_mom_.NewAthenaArray(23);
     // comoving directions
