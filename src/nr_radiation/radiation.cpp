@@ -313,10 +313,10 @@ NRRadiation::NRRadiation(MeshBlock *pmb, ParameterInput *pin):
       mu_lbd.NewAthenaArray(3,nang_lbd);
       wmu_lbd.NewAthenaArray(nang_lbd);
       for (int n=0; n<nang_lbd; ++n) {
-          mu_lbd(0,n) = lebedev_wxyz[n][0];
-          mu_lbd(1,n) = lebedev_wxyz[n][1];
-          mu_lbd(2,n) = lebedev_wxyz[n][2];
-          mu_lbd(3,n) = lebedev_wxyz[n][3];
+          wmu_lbd(0,n) = lebedev_wxyz[n][0];
+          mu_lbd(0,n)  = lebedev_wxyz[n][1];
+          mu_lbd(1,n)  = lebedev_wxyz[n][2];
+          mu_lbd(2,n)  = lebedev_wxyz[n][3];
       } // endfor n
     } // endif refine_pol_coeff
   }
