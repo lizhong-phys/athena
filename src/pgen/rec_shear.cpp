@@ -55,13 +55,18 @@
 #error "This problem generator requires magnetic fields"
 #endif
 
+// Global parameters
+Real zmin, zmax, zp, zm;
+
+// Define helper functions
 void VertGrav(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
               AthenaArray<Real> &cons_scalar);
 
+
+
 namespace {
-Real zmin, zmax;
 Real iso_cs, gm1, d0, p0;
 Real nwx, nwy; // Wavenumbers
 Real Lx, Ly, Lz; // root grid size, global to share with output functions
@@ -76,6 +81,10 @@ Real HistorydVxVy(MeshBlock *pmb, int iout);
 
 // ===================================================================================
 void Mesh::InitUserMeshData(ParameterInput *pin) {
+  zmin = pin->GetReal("mesh", "x3min");
+  zmax = pin->GetReal("mesh", "x3max");
+  zp = ((zmax+zmin)/2 + zmax)/2;
+  zm = ((zmax+zmin)/2 + zmin)/2;
   ipert = pin->GetOrAddInteger("problem","ipert", 1);
   if (ipert > 0 && ipert < 5) { // ipert = 1-4
     AllocateUserHistoryOutput(2);
@@ -119,8 +128,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   // gamma, press, sound speed
   Real gamma = 1.0;
-  zmin   = pin->GetReal("mesh","x3min");
-  zmax   = pin->GetReal("mesh","x3max");
   d0     = pin->GetOrAddReal("problem","d0", 1.0);
   jwidth = pin->GetOrAddReal("problem","jwidth", 1.0);
   if (NON_BAROTROPIC_EOS) {
@@ -371,18 +378,16 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         }
       }
     } else if (ifield == 2) {
-      Real zl = ((zmax+zmin)/2 + zmin)/2;
-      Real zr = ((zmax+zmin)/2 + zmax)/2;
       for (int k=ks; k<=ke; k++) {
         for (int j=js; j<=je; j++) {
           for (int i=is; i<=ie; i++) {
             Real x3 = pcoord->x3v(k);
             pfield->b.x1f(k,j,i) = 0.0;
-            pfield->b.x2f(k,j,i) = B0*(std::tanh((x3-zr)/jwidth)-std::tanh((x3-zl)/jwidth)-1.0); // we changed this part to double layer
+            pfield->b.x2f(k,j,i) = B0*(std::tanh((x3-zp)/jwidth)-std::tanh((x3-zm)/jwidth)+1.0); // we changed this part to double layer
             pfield->b.x3f(k,j,i) = 0.0;
             if (i==ie) pfield->b.x1f(k,j,ie+1) = 0.0;
-            // if (j==je) pfield->b.x2f(k,je+1,i) = B0*(std::tanh((x3-0.25)/0.02)-std::tanh((x3+0.25)/0.02)-1.0); // we changed this part to double layer
-            if (j==je) pfield->b.x2f(k,je+1,i) = B0*(std::tanh((x3-zr)/jwidth)-std::tanh((x3-zl)/jwidth)-1.0); // we changed this part to double layer
+            // if (j==je) pfield->b.x2f(k,je+1,i) = B0*(std::tanh((x3-0.25)/0.02)-std::tanh((x3+0.25)/0.02)+1.0); // we changed this part to double layer
+            if (j==je) pfield->b.x2f(k,je+1,i) = B0*(std::tanh((x3-zp)/jwidth)-std::tanh((x3-zm)/jwidth)+1.0); // we changed this part to double layer
             if (k==ke) pfield->b.x3f(ke+1,j,i) = 0.0;
           }
         }
@@ -504,8 +509,6 @@ void VertGrav(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
               AthenaArray<Real> &cons_scalar) {
-  Real zp = 0.25;
-  Real zm = -0.25;
   for (int k=pmb->ks; k<=pmb->ke; ++k) {
     for (int j=pmb->js; j<=pmb->je; ++j) {
       for (int i=pmb->is; i<=pmb->ie; ++i) {
