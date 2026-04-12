@@ -3,34 +3,11 @@
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
-//! \file hgb.cpp
-//! \brief Problem generator for non-linear 3D MHD in shearing sheet.
-//!
-//! PURPOSE:  Problem generator for non-linear 3D MHD in shearing sheet. Based on the
-//!  initial conditions described in "Local Three-dimensional Magnetohydrodynamic
-//!  Simulations of Accretion Disks" by Hawley, Gammie & Balbus, or HGB.
-//!
-//! Several different field configurations and perturbations are possible:
-//!
-//! - ifield = 1 - Bz=B0 sin(kx*x1) field with zero-net-flux [default] (kx input)
-//! - ifield = 2 - uniform Bz (we changed)
-//! - ifield = 3 - B=(0,B0 cos(kx*x1),B0 sin(kx*x1))= zero-net flux w helicity
-//! - ifield = 4 - B=(0,B0/sqrt(2),B0/sqrt(2))= net toroidal+vertical field
-//! - ifield = 5 - uniform By
-//!
-//! - ipert = 1 - random perturbations to P and V [default, used by HGB]
-//! - ipert = 2 - uniform Vx=amp (epicyclic wave test)
-//! - ipert = 3 - nonlinear density wave test of Fromang & Papaloizou (2007)
-//! - ipert = 4 - nonlinear shearing wave test of Heinemann & Papaloizou (2009)
-//!
-//! For linear 3D MHD in shearing sheet, use the jgg.cpp problem generator.
-//! To run simulations of stratified disks (including vertical gravity), use the
-//! strat.c problem generator.
-//!
-//! REFERENCE: Hawley, J. F. & Balbus, S. A., ApJ 400, 595-609 (1992).
+//! \file rec_shear.cpp
+//! \brief Problem generator for double-layer shearing sheets.
+//! HGB: short for Hawley, Gammie & Balbus (see "Local Three-dimensional Magnetohydrodynamic
+//!  Simulations of Accretion Disks")
 //============================================================================
-
-// C headers
 
 // C++ headers
 #include <cmath>      // sqrt()
@@ -48,6 +25,7 @@
 #include "../hydro/hydro.hpp"
 #include "../mesh/mesh.hpp"
 #include "../orbital_advection/orbital_advection.hpp"
+#include "../nr_radiation/radiation.hpp"
 #include "../parameter_input.hpp"
 #include "../utils/utils.hpp" // ran2()
 
@@ -55,66 +33,115 @@
 #error "This problem generator requires magnetic fields"
 #endif
 
-// Global parameters
-Real zmin, zmax, zp, zm;
-
-// Define helper functions
-void VertGrav(MeshBlock *pmb, const Real time, const Real dt,
+// Explicit source/sink terms
+void SrcTerms(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
               AthenaArray<Real> &cons_scalar);
 
+// Opacity function
+void FreeFreeOpacity(MeshBlock *pmb, AthenaArray<Real> &prim);
 
+// Hydro and radiation boundary conditions
+// void HydroInnerX3(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+//                   Real time, Real dt,
+//                   int il, int iu, int jl, int ju, int kl, int ku, int ngh);
+//
+// void HydroOuterX3(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+//                   Real time, Real dt,
+//                   int il, int iu, int jl, int ju, int kl, int ku, int ngh);
+//
+// void RadInnerX3(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
+//                 const AthenaArray<Real> &w, FaceField &b,
+//                 AthenaArray<Real> &ir, Real time, Real dt,
+//                 int il, int iu, int jl, int ju, int kl, int ku, int ngh);
+//
+// void RadOuterX3(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
+//                 const AthenaArray<Real> &w, FaceField &b,
+//                 AthenaArray<Real> &ir, Real time, Real dt,
+//                 int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 
 namespace {
-Real iso_cs, gm1, d0, p0;
-Real nwx, nwy; // Wavenumbers
-Real Lx, Ly, Lz; // root grid size, global to share with output functions
-Real Omega_0, qshear;
-Real amp, beta;
-Real jwidth;
-int ipert;
+  Real z_mid, z_max, z_min;                // coordinate paramters
+  Real z_lower, z_upper, jwidth;           // current sheet paramters
+  Real iso_cs, gm1, d0, p0;                // fluid parameters
+  Real beta, beta_mri, bx2by, bz2bx;       // magnetic parameters
+  Real dfloor, pfloor;                     // floors
+  Real Lx, Ly, Lz;                         // root grid size, global to share with output functions
+  Real Omega_0, qshear;                    // shearing box parameters
+  Real nwx, nwy;                           // wavenumbers
+  Real amp;                                // random perturbation amplitude
+  Real grav, sinkwidth, tau_sink;          // source and sink parameters
+  Real kappa0_sct, kappa0_ffr, kappa0_ffp; // opacity paramters
 
-Real HistoryBxBy(MeshBlock *pmb, int iout);
-Real HistorydVxVy(MeshBlock *pmb, int iout);
-} // namespace
+  Real HistoryBxBy(MeshBlock *pmb, int iout);
+  Real HistorydVxVy(MeshBlock *pmb, int iout);
+} // end namespace
 
 // ===================================================================================
 void Mesh::InitUserMeshData(ParameterInput *pin) {
-  zmin = pin->GetReal("mesh", "x3min");
-  zmax = pin->GetReal("mesh", "x3max");
-  zp = ((zmax+zmin)/2 + zmax)/2;
-  zm = ((zmax+zmin)/2 + zmin)/2;
-  ipert = pin->GetOrAddInteger("problem","ipert", 1);
-  if (ipert > 0 && ipert < 5) { // ipert = 1-4
-    AllocateUserHistoryOutput(2);
-    EnrollUserHistoryOutput(0, HistoryBxBy, "-BxBy");
-    EnrollUserHistoryOutput(1, HistorydVxVy, "dVxVy");
 
-    // Enroll user-defined physical source terms
-    //   vertical external gravitational potential
-    EnrollUserExplicitSourceFunction(VertGrav);
+  Real float_min = std::numeric_limits<float>::min();
+  z_min = pin->GetReal("mesh", "x3min");
+  z_max = pin->GetReal("mesh", "x3max");
+  z_mid = 0.5*(z_max+z_min);
+  z_lower = (z_mid + z_min)/2.0;
+  z_upper = (z_mid + z_max)/2.0;
+  gm1 = pin->GetOrAddReal("hydro", "gamma", 5./3) - 1;
+  grav = pin->GetOrAddReal("problem", "grav", 0.0);
+  sinkwidth = pin->GetOrAddReal("problem", "sinkwidth", 0.0);
+  tau_sink = pin->GetOrAddReal("problem", "tau_sink", 1.0);
+  dfloor = pin->GetOrAddReal("hydro", "dfloor", 1024*(float_min));
+  pfloor = pin->GetOrAddReal("hydro", "pfloor", 1024*(float_min));
+  kappa0_sct = pin->GetOrAddReal("radiation", "electron_scattering", 0.34);
+  kappa0_ffr = pin->GetOrAddReal("radiation", "kappa_ffr", 1024*(float_min));
+  kappa0_ffp = pin->GetOrAddReal("radiation", "kappa_ffp", 1024*(float_min));
 
-  } else {
-    std::stringstream msg;
-    msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
-        << "ipert should be chosen from 1 to 4." << std::endl;
-    ATHENA_ERROR(msg);
-  }
+  // Overwrite periodic boundaries in z-direction
+  // if (NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) {
+  //   EnrollUserBoundaryFunction(BoundaryFace::inner_x3, HydroInnerX3);
+  //   EnrollUserBoundaryFunction(BoundaryFace::outer_x3, HydroOuterX3);
+  //   EnrollUserRadBoundaryFunction(BoundaryFace::inner_x3, RadInnerX3);
+  //   EnrollUserRadBoundaryFunction(BoundaryFace::outer_x3, RadOuterX3);
+  // }
 
+  // User-defined outputs
+  AllocateUserHistoryOutput(2);
+  EnrollUserHistoryOutput(0, HistoryBxBy, "-BxBy");
+  EnrollUserHistoryOutput(1, HistorydVxVy, "dVxVy");
+
+  // User-defined physical source/sink terms
+  EnrollUserExplicitSourceFunction(SrcTerms);
+
+  // Module check
   if (!shear_periodic) {
     std::stringstream msg;
-    msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
+    msg << "### FATAL ERROR in rec_shear.cpp ProblemGenerator" << std::endl
         << "This problem generator requires shearing box." << std::endl;
     ATHENA_ERROR(msg);
   }
 
   if (mesh_size.nx2 == 1) {
     std::stringstream msg;
-    msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
+    msg << "### FATAL ERROR in rec_shear.cpp ProblemGenerator" << std::endl
         << "This problem generator works only in 2D or 3D." << std::endl;
     ATHENA_ERROR(msg);
   }
+
+  if ((NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) && (!NON_BAROTROPIC_EOS)) {
+    std::stringstream msg;
+    msg << "### FATAL ERROR in rec_shear.cpp ProblemGenerator" << std::endl
+        << "EoS cannot be barotropic when radiation is included in this problem generator." << std::endl;
+    ATHENA_ERROR(msg);
+  }
+
+  return;
+} // end Mesh::InitUserMeshData
+
+void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
+  if (NR_RADIATION_ENABLED || IM_RADIATION_ENABLED)
+    pnrrad->EnrollOpacityFunction(FreeFreeOpacity);
+
   return;
 }
 
@@ -128,8 +155,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   // gamma, press, sound speed
   Real gamma = 1.0;
-  d0     = pin->GetOrAddReal("problem","d0", 1.0);
-  jwidth = pin->GetOrAddReal("problem","jwidth", 1.0);
+  d0     = pin->GetOrAddReal("problem", "d0",     1.0);
+  jwidth = pin->GetOrAddReal("problem", "jwidth", 0.1);
+  bx2by  = pin->GetOrAddReal("problem", "bx2by",  0.02);
+  bz2bx  = pin->GetOrAddReal("problem", "bz2bx",  0.01);
   if (NON_BAROTROPIC_EOS) {
     p0     = pin->GetReal("problem","p0");
     gamma  = peos->GetGamma();
@@ -142,7 +171,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // shearing box parameter
   if (porb->shboxcoord != 1) {
     std::stringstream msg;
-    msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
+    msg << "### FATAL ERROR in rec_shear.cpp ProblemGenerator" << std::endl
         << "This problem generator requires shearing box in x-y plane." << std::endl
         << "Check <orbital_advection> shboxcoord parameter." << std::endl;
     ATHENA_ERROR(msg);
@@ -152,30 +181,16 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   // Read problem parameters for initial conditions
   amp = pin->GetReal("problem","amp");
-
-  Real dir_sgn;
-  int ifield, Bdir;
-  beta    = pin->GetReal("problem","beta");
-  ifield  = pin->GetOrAddInteger("problem","ifield", 1);
-  if (ifield <1 || ifield >5) {
-    std::stringstream msg;
-    msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
-        << "ifield should be chosen from 1 to 5." << std::endl;
-    ATHENA_ERROR(msg);
-  }
-
-  // For net-flux calc, provide the direction of the B field
-  Bdir    = pin->GetOrAddInteger("problem","Bdir",1);
-  if (Bdir > 0)
-    dir_sgn = 1.0;
-  else
-    dir_sgn = -1.0;
+  beta = pin->GetReal("problem", "beta");
+  beta_mri = pin->GetReal("problem", "beta_mri");
 
   // Compute field strength based on beta.
-  Real B0  = std::sqrt(static_cast<Real>(2.0*p0/beta));
+  Real By0 = std::sqrt(static_cast<Real>(2.0*p0/beta));
+  // Real Bz0 = std::sqrt(static_cast<Real>(2.0*p0/beta_mri));
+  Real Bz0 = 0.0;
 
   // Ensure a different initial random seed for each meshblock.
-  std::int64_t iseed = -1 - gid;
+  std::int64_t iseed = - 1 - gid;
 
   // Initialize boxsize
   Lx = pmy_mesh->mesh_size.x1max - pmy_mesh->mesh_size.x1min;
@@ -184,306 +199,100 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   // initialize wavenumbers
   nwx = pin->GetOrAddInteger("problem","nwx",1);
-  if (nwx==0) {
-    if (ipert==4) {
-      std::stringstream msg;
-      msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
-          << "<problem> nwx must be non-zero for ipert=4." << std::endl;
-      ATHENA_ERROR(msg);
-    }
-    if (ifield==3) {
-      std::stringstream msg;
-      msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
-          << "<problem> nwx must be non-zero for ifield=3." << std::endl;
-      ATHENA_ERROR(msg);
-    }
-  }
   nwy = pin->GetOrAddInteger("problem","nwy",1);
 
-  Real kx = (TWO_PI/Lx)*(static_cast<Real>(nwx));// nxw=-ve for leading wave
+  Real kx = (TWO_PI/Lx)*(static_cast<Real>(nwx)); // nxw = -ve for leading wave
   Real ky = (TWO_PI/Ly)*(static_cast<Real>(nwy));
 
-  // Rescale amp to sound speed for ipert 2
-  if (ipert == 2) {
-    if (NON_BAROTROPIC_EOS)
-      amp *= std::sqrt(gamma*p0/d0);
-    else
-      amp *= iso_cs;
-  }
-
   // Initialize perturbations
-  // ipert = 1 - random perturbations to P and V [default, used by HGB]
-  // ipert = 2 - uniform Vx=amp (epicyclic wave test)
-  // ipert = 3 - nonlinear density wave test of Fromang & Papaloizou (2007)
-  // ipert = 4 - nonlinear shearing wave test of Heinemann & Papaloizou (2009)
   // hydro
-  if (ipert == 1) {
-    Real x1;
-    Real rd(0.0), rp(0.0), rvx(0.0), rvy(0.0), rvz(0.0);
-    Real rval;
-    for (int k=ks; k<=ke; k++) {
-      for (int j=js; j<=je; j++) {
-        for (int i=is; i<=ie; i++) {
-          x1  = pcoord->x1v(i);
-          // In HGB, amp = 2.5e-2
-          rval = amp*(ran2(&iseed) - 0.5);
-          if (NON_BAROTROPIC_EOS) {
-            rp = p0*(1.0 + 2.0*rval);
-            rd = d0;
-          } else {
-            rd = d0; //den*(1.0 + 2.0*rval);
-          }
-          // Following HGB: the perturbations to V/Cs are
-          // (1/5)amp/std::sqrt(gamma)
-          rval = amp*(ran2(&iseed) - 0.5);
-          rvx = (0.4/std::sqrt(3.0)) *rval*1e-3/std::sqrt(gamma);
-          //rvx  = 0.4*rval*iso_cs/std::sqrt(gamma);
-          SumRvx += rvx;
+  Real x1, x3;
+  Real rd(0.0), rp(0.0), rvx(0.0), rvy(0.0), rvz(0.0);
+  Real rval;
+  for (int k=ks; k<=ke; k++) {
+    x3 = pcoord->x3v(k);
+    for (int j=js; j<=je; j++) {
+      for (int i=is; i<=ie; i++) {
+        x1  = pcoord->x1v(i);
+        rval = amp*(ran2(&iseed) - 0.5);
+        if (NON_BAROTROPIC_EOS) {
+          rp = p0*(1.0 + 2.0*rval);
+          rd = d0;
+        } else {
+          rd  = d0;
+          rd += SQR(By0/iso_cs)*(1.0+SQR(bx2by))/2.0 * (1.0 - SQR((std::tanh((x3-z_upper)/jwidth)-std::tanh((x3-z_lower)/jwidth)+1.0)));
+        }
 
-          rval = amp*(ran2(&iseed) - 0.5);
-          rvy = (0.4/std::sqrt(3.0)) *rval*1e-3/std::sqrt(gamma);
-          //rvy  = 0.4*rval*iso_cs/std::sqrt(gamma);
-          SumRvy += rvy;
+        // Following HGB: the perturbations to V/Cs are
+        // (1/5)amp/std::sqrt(gamma)
+        rval = amp*(ran2(&iseed) - 0.5);
+        rvx = (0.4/std::sqrt(3.0)) *rval*1e-3/std::sqrt(gamma);
+        SumRvx += rvx;
 
-          rval = amp*(ran2(&iseed) - 0.5);
-          rvz = (0.4/std::sqrt(3.0)) *rval*1e-3/std::sqrt(gamma);
-          //rvz  = 0.4*rval*iso_cs/std::sqrt(gamma);
-          SumRvz += rvz;
+        rval = amp*(ran2(&iseed) - 0.5);
+        rvy = (0.4/std::sqrt(3.0)) *rval*1e-3/std::sqrt(gamma);
+        SumRvy += rvy;
 
-          // Initialize (d, M, P)
-          phydro->u(IDN,k,j,i) = rd;
-          phydro->u(IM1,k,j,i) = rd*rvx;
-          phydro->u(IM2,k,j,i) = rd*rvy;
-          if(!porb->orbital_advection_defined)
-            phydro->u(IM2,k,j,i) -= rd*qshear*Omega_0*x1;
-          phydro->u(IM3,k,j,i) = rd*rvz;
-          if (NON_BAROTROPIC_EOS) {
-            phydro->u(IEN,k,j,i) = rp/(gamma-1.0)
-                                   + 0.5*(SQR(phydro->u(IM1,k,j,i))
-                                          +SQR(phydro->u(IM2,k,j,i))
-                                          +SQR(phydro->u(IM3,k,j,i)))/rd;
-          }
-        }
-      }
-    }
-    // For random perturbations as in HGB, ensure net momentum is zero by
-    // subtracting off mean of perturbations
-    int cell_num = block_size.nx1*block_size.nx2*block_size.nx3;
-    SumRvx /= cell_num;
-    SumRvy /= cell_num;
-    SumRvz /= cell_num;
-    for (int k=ks; k<=ke; k++) {
-      for (int j=js; j<=je; j++) {
-        for (int i=is; i<=ie; i++) {
-          phydro->u(IM1,k,j,i) -= rd*SumRvx;
-          phydro->u(IM2,k,j,i) -= rd*SumRvy;
-          phydro->u(IM3,k,j,i) -= rd*SumRvz;
-        }
-      }
-    }
-  } else if (ipert == 2) {
-    Real x1;
-    Real rd(0.0), rp(0.0), rvx(0.0), rvy(0.0), rvz(0.0);
-    rp = p0;
-    rd = d0;
-    rvx = amp;
-    rvy = 0.0;
-    rvz = 0.0;
-    for (int k=ks; k<=ke; k++) {
-      for (int j=js; j<=je; j++) {
-        for (int i=is; i<=ie; i++) {
-          // Initialize (d, M, P)
-          x1  = pcoord->x1v(i);
-          phydro->u(IDN,k,j,i) = rd;
-          phydro->u(IM1,k,j,i) = rd*rvx;
-          phydro->u(IM2,k,j,i) = rd*rvy;
-          if(!porb->orbital_advection_defined)
-            phydro->u(IM2,k,j,i) -= rd*qshear*Omega_0*x1;
-          phydro->u(IM3,k,j,i) = rd*rvz;
-          if (NON_BAROTROPIC_EOS) {
-            phydro->u(IEN,k,j,i) = rp/(gamma-1.0)
-                                   + 0.5*(SQR(phydro->u(IM1,k,j,i))
-                                          +SQR(phydro->u(IM2,k,j,i))
-                                          +SQR(phydro->u(IM3,k,j,i)))/rd;
-          }
-        }
-      }
-    }
-  } else if (ipert == 3) {
-    std::stringstream msg;
-    msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
-        << "ipert=3 (nonlinear density wave test of Fromang & Papaloizou)"
-        << " not implemented yet!" << std::endl;
-    ATHENA_ERROR(msg);
-    // For FP density wave test, read data from file: not implemented yet.
-  } else if (ipert == 4) {
-    Real x1, x2;
-    Real rd(0.0), rvx(0.0), rvy(0.0), rvz(0.0);
-    if (NON_BAROTROPIC_EOS) {
-      std::stringstream msg;
-      msg << "### FATAL ERROR in hgb.cpp ProblemGenerator" << std::endl
-          << "ipert=4 (nonlinear density wave test of Heinemann & Papaloizou)"
-          << " requires the isothermal eos." << std::endl;
-      ATHENA_ERROR(msg);
-    } else { // isothermal
-      Real kappa2 = 2.0*(2.0 - qshear)*Omega_0*Omega_0;
-      Real aa = (kx*kx + ky*ky)*SQR(iso_cs) + kappa2;
-      Real bb = 2.0*qshear*Omega_0*ky*iso_cs;
-      Real denom = aa*aa + bb*bb;
-      Real rd_hat = (ky*iso_cs*bb -2.0*Omega_0*aa)*amp/denom;
-      Real px_hat = -d0*iso_cs*(ky*iso_cs*aa +2.0*Omega_0*bb)*amp/denom;
-      Real py_hat = d0*(amp + ky*px_hat + (2.0-qshear)*Omega_0*rd_hat)/kx;
-      for (int k=ks; k<=ke; k++) {
-        for (int j=js; j<=je; j++) {
-          for (int i=is; i<=ie; i++) {
-            x1 = pcoord->x1v(i);
-            x2 = pcoord->x2v(j);
-            // Initialize (d, M, P)
-            rd  = d0*(1.0 + rd_hat*std::cos(static_cast<Real>(kx*x1 + ky*x2)));
-            rvx = px_hat*std::sin(static_cast<Real>(kx*x1 + ky*x2))/rd;
-            rvy = py_hat*std::sin(static_cast<Real>(kx*x1 + ky*x2))/rd;
-            rvz = 0.0;
-            phydro->u(IDN,k,j,i) = rd;
-            phydro->u(IM1,k,j,i) = rd*rvx;
-            phydro->u(IM2,k,j,i) = rd*rvy;
-            if(!porb->orbital_advection_defined)
-              phydro->u(IM2,k,j,i) -= rd*qshear*Omega_0*x1;
-            phydro->u(IM3,k,j,i) = rd*rvz;
-          }
-        }
-      }
-    }
-  } // hydro
+        rval = amp*(ran2(&iseed) - 0.5);
+        rvz = (0.4/std::sqrt(3.0)) *rval*1e-3/std::sqrt(gamma);
+        SumRvz += rvz;
 
-  // Initialize b.  For 3D shearing box B1=Bx, B2=By, B3=Bz
-  // ifield = 1 - Bz=B0std::sin(ks*x1) field with zero-net-flux[default]
-  // ifield = 2 - uniform Bz --> we changed this part to a double layer Harris sheet
-  // ifield = 3 - B=(0,B0std::cos(kx*x1),B0std::sin(kx*x1))=zero-net flux w helicity
-  // ifield = 4 - B=(0,B0/std::sqrt(2),B0/std::sqrt(2))= net toroidal+vertical field
-  // ifield = 5 - uniform By
-  if (ifield != 3) {
-    if (ifield == 1) {
-      for (int k=ks; k<=ke; k++) {
-        for (int j=js; j<=je; j++) {
-          for (int i=is; i<=ie; i++) {
-            Real x1  = pcoord->x1v(i);
-            pfield->b.x1f(k,j,i) = 0.0;
-            pfield->b.x2f(k,j,i) = 0.0;
-            pfield->b.x3f(k,j,i) = B0*(std::sin(static_cast<Real>(kx)*x1));
-            if (i==ie) pfield->b.x1f(k,j,ie+1) = 0.0;
-            if (j==je) pfield->b.x2f(k,je+1,i) = 0.0;
-            if (k==ke)
-              pfield->b.x3f(ke+1,j,i) = B0*(std::sin(static_cast<Real>(kx)*x1));
-          }
+        // Initialize (d, M, P)
+        phydro->u(IDN,k,j,i) = rd;
+        phydro->u(IM1,k,j,i) = rd*rvx;
+        phydro->u(IM2,k,j,i) = rd*rvy;
+        if(!porb->orbital_advection_defined)
+          phydro->u(IM2,k,j,i) -= rd*qshear*Omega_0*x1;
+        phydro->u(IM3,k,j,i) = rd*rvz;
+        if (NON_BAROTROPIC_EOS) {
+          phydro->u(IEN,k,j,i) = rp/(gamma-1.0)
+                                 + 0.5*(SQR(phydro->u(IM1,k,j,i))
+                                       +SQR(phydro->u(IM2,k,j,i))
+                                       +SQR(phydro->u(IM3,k,j,i)))/rd;
         }
-      }
-    } else if (ifield == 2) {
-      for (int k=ks; k<=ke; k++) {
-        for (int j=js; j<=je; j++) {
-          for (int i=is; i<=ie; i++) {
-            Real x3 = pcoord->x3v(k);
-            pfield->b.x1f(k,j,i) = 0.0;
-            pfield->b.x2f(k,j,i) = B0*(std::tanh((x3-zp)/jwidth)-std::tanh((x3-zm)/jwidth)+1.0); // we changed this part to double layer
-            pfield->b.x3f(k,j,i) = 0.0;
-            if (i==ie) pfield->b.x1f(k,j,ie+1) = 0.0;
-            // if (j==je) pfield->b.x2f(k,je+1,i) = B0*(std::tanh((x3-0.25)/0.02)-std::tanh((x3+0.25)/0.02)+1.0); // we changed this part to double layer
-            if (j==je) pfield->b.x2f(k,je+1,i) = B0*(std::tanh((x3-zp)/jwidth)-std::tanh((x3-zm)/jwidth)+1.0); // we changed this part to double layer
-            if (k==ke) pfield->b.x3f(ke+1,j,i) = 0.0;
-          }
-        }
-      }
-    } else if (ifield == 4) {
-      for (int k=ks; k<=ke; k++) {
-        for (int j=js; j<=je; j++) {
-          for (int i=is; i<=ie; i++) {
-            pfield->b.x1f(k,j,i) = 0.0;
-            pfield->b.x2f(k,j,i) = B0/std::sqrt(2);
-            pfield->b.x3f(k,j,i) = B0/std::sqrt(2);
-            if (i==ie) pfield->b.x1f(k,j,ie+1) = 0.0;
-            if (j==je) pfield->b.x2f(k,je+1,i) = B0/std::sqrt(2);
-            if (k==ke) pfield->b.x3f(ke+1,j,i) = B0/std::sqrt(2);
-          }
-        }
-      }
-    } else { // ifield = 5
-      for (int k=ks; k<=ke; k++) {
-        for (int j=js; j<=je; j++) {
-          for (int i=is; i<=ie; i++) {
-            pfield->b.x1f(k,j,i) = 0.0;
-            pfield->b.x2f(k,j,i) = B0;
-            pfield->b.x3f(k,j,i) = 0.0;
-            if (i==ie) pfield->b.x1f(k,j,ie+1) = 0.0;
-            if (j==je) pfield->b.x2f(k,je+1,i) = B0;
-            if (k==ke) pfield->b.x3f(ke+1,j,i) = 0.0;
-          }
-        }
-      }
-    }
-  } else { // ifield = 4
-    // vector potential
-    AthenaArray<Real> rax, ray, raz;
-    rax.NewAthenaArray(ncc3, ncc2, ncc1);
-    ray.NewAthenaArray(ncc3, ncc2, ncc1);
-    raz.NewAthenaArray(ncc3, ncc2, ncc1);
+      }  // endfor i
+    }  // endfor j
+  }  // endfor k
 
-    // set rax
-    for (int k=ks; k<=ke+1; k++) {
-      for (int j=js; j<=je+1; j++) {
-        for (int i=is; i<=ie; i++) {
-          rax(k,j,i) = 0.0;
-        }
-      }
-    }
+  // For random perturbations as in HGB, ensure net momentum is zero by
+  // subtracting off mean of perturbations
+  int cell_num = block_size.nx1*block_size.nx2*block_size.nx3;
+  SumRvx /= cell_num;
+  SumRvy /= cell_num;
+  SumRvz /= cell_num;
+  for (int k=ks; k<=ke; k++) {
+    for (int j=js; j<=je; j++) {
+      for (int i=is; i<=ie; i++) {
+        phydro->u(IM1,k,j,i) -= rd*SumRvx;
+        phydro->u(IM2,k,j,i) -= rd*SumRvy;
+        phydro->u(IM3,k,j,i) -= rd*SumRvz;
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
-    // set ray
-    for (int k=ks; k<=ke+1; k++) {
-      for (int j=js; j<=je; j++) {
-        for (int i=is; i<=ie+1; i++) {
-          Real x1 = pcoord->x1f(i);
-          ray(k,j,i) = -B0*std::cos(kx*x1)/kx;
+  // Initialize magnetic fields for a double-layer Harris sheet
+  for (int k=ks; k<=ke; k++) {
+    Real x3 = pcoord->x3v(k);
+    for (int j=js; j<=je; j++) {
+      for (int i=is; i<=ie; i++) {
+        Real x1  = pcoord->x1v(i);
+        pfield->b.x1f(k,j,i) = (By0*bx2by) * (std::tanh((x3-z_upper)/jwidth) - std::tanh((x3-z_lower)/jwidth) + 1.0);
+        pfield->b.x2f(k,j,i) =  By0        * (std::tanh((x3-z_upper)/jwidth) - std::tanh((x3-z_lower)/jwidth) + 1.0);
+        pfield->b.x3f(k,j,i) =  By0*bx2by*bz2bx;
+        pfield->b.x3f(k,j,i) += Bz0*(std::sin(static_cast<Real>(kx)*x1)) * (std::exp(-SQR((x3-z_upper)/jwidth)/2.0) + std::exp(-SQR((x3-z_lower)/jwidth)/2.0));
+        // let gas pressure balance the lack of B pressure in current sheets
+        if (i==ie) pfield->b.x1f(k,j,ie+1) = (By0*bx2by) * (std::tanh((x3-z_upper)/jwidth) - std::tanh((x3-z_lower)/jwidth) + 1.0);
+        if (j==je) pfield->b.x2f(k,je+1,i) =  By0        * (std::tanh((x3-z_upper)/jwidth) - std::tanh((x3-z_lower)/jwidth) + 1.0);
+        if (k==ke) {
+          pfield->b.x3f(ke+1,j,i) =  By0*bx2by*bz2bx;
+          pfield->b.x3f(ke+1,j,i) += Bz0*(std::sin(static_cast<Real>(kx)*x1)) * (std::exp(-SQR((x3-z_upper)/jwidth)/2.0) + std::exp(-SQR((x3-z_lower)/jwidth)/2.0));
         }
-      }
-    }
+        //if (k==ke) pfield->b.x3f(ke+1,j,i) = By0*bx2by*bz2bx;
+      } // endfor i
+    } // endfor j
+  } // endfor k
 
-    // set raz
-    for (int k=ks; k<=ke; k++) {
-      for (int j=js; j<=je+1; j++) {
-        for (int i=is; i<=ie+1; i++) {
-          Real x1 = pcoord->x1f(i);
-          raz(k,j,i) = -B0*std::sin(kx*x1)/kx;
-        }
-      }
-    }
-
-    // calculate b from vector potential
-    for (int k=ks; k<=ke  ; k++) {
-      for (int j=js; j<=je  ; j++) {
-        for (int i=is; i<=ie+1; i++) {
-          pfield->b.x1f(k,j,i) = (raz(k,j+1,i)-raz(k,j,i))/pcoord->dx2f(j)
-                                 -(ray(k+1,j,i)-ray(k,j,i))/pcoord->dx3f(k);
-        }
-      }
-    }
-    for (int k=ks; k<=ke  ; k++) {
-      for (int j=js; j<=je+1; j++) {
-        for (int i=is; i<=ie  ; i++) {
-          pfield->b.x2f(k,j,i) = (rax(k+1,j,i)-rax(k,j,i))/pcoord->dx3f(k)
-                                 -(raz(k,j,i+1)-raz(k,j,i))/pcoord->dx1f(i);
-        }
-      }
-    }
-
-    for (int k=ks; k<=ke+1; k++) {
-      for (int j=js; j<=je  ; j++) {
-        for (int i=is; i<=ie  ; i++) {
-          pfield->b.x3f(k,j,i) = (ray(k,j,i+1)-ray(k,j,i))/pcoord->dx1f(i)
-                                 -(rax(k,j+1,i)-rax(k,j,i))/pcoord->dx2f(j);
-        }
-      }
-    }
-  }
-
-  // add magnetic energy
+  // Add magnetic energy
   if (NON_BAROTROPIC_EOS) {
     for (int k=ks; k<=ke; k++) {
       for (int j=js; j<=je; j++) {
@@ -492,54 +301,255 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
               0.5*(SQR(0.5*(pfield->b.x1f(k,j,i) + pfield->b.x1f(k,j,i+1))) +
                    SQR(0.5*(pfield->b.x2f(k,j,i) + pfield->b.x2f(k,j+1,i))) +
                    SQR(0.5*(pfield->b.x3f(k,j,i) + pfield->b.x3f(k+1,j,i))));
-        }
-      }
-    }
-  }
+        } // endfor i
+      } // endfor j
+    } // endfor k
+  } // endif (NON_BAROTROPIC_EOS)
+
+  // Initialize radiation
+  if (NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) {
+    for (int k=ks; k<=ke; ++k) {
+      for (int j=js; j<=je; ++j) {
+        for (int i=is; i<=ie; ++i) {
+          for(int ifr=0; ifr<pnrrad->nfreq; ++ifr){
+            // initialize opacity
+            pnrrad->sigma_s(k,j,i,ifr)  = 0.0;
+            pnrrad->sigma_a(k,j,i,ifr)  = 0.0;
+            pnrrad->sigma_pe(k,j,i,ifr) = 0.0;
+            pnrrad->sigma_p(k,j,i,ifr)  = 0.0;
+            // initialize radiation
+            for(int n=0; n<pnrrad->nang; ++n){
+              pnrrad->ir(k,j,i,ifr*pnrrad->nang+n) = 0.0;
+            } // endfor n
+          } // endfor ifr
+        } // endfor i
+      } // endfor j
+    } // endfor k
+  } // endif radiation_enable
 
   return;
 }
 
 
-
-
-
-
-void VertGrav(MeshBlock *pmb, const Real time, const Real dt,
+// User-defined physical source/sink terms
+void SrcTerms(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
               AthenaArray<Real> &cons_scalar) {
+
+  const Real Omega_0 = pmb->porb->Omega0;
+  NRRadiation *prad = (NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) ? pmb->pnrrad : NULL;
+  Real zsink_l = z_mid - sinkwidth/2;
+  Real zsink_u = z_mid + sinkwidth/2;
+  Real zbot_l  = z_min;
+  Real zbot_u  = z_min + sinkwidth/2;
+  Real ztop_l  = z_max - sinkwidth/2;
+  Real ztop_u  = z_max;
+
   for (int k=pmb->ks; k<=pmb->ke; ++k) {
+    Real x3 = pmb->pcoord->x3v(k);
+    Real z0 = (x3 > z_mid) ? z_upper : z_lower;
+
     for (int j=pmb->js; j<=pmb->je; ++j) {
       for (int i=pmb->is; i<=pmb->ie; ++i) {
+        // gravitational source terms
         Real den = prim(IDN,k,j,i);
-        Real x3 = pmb->pcoord->x3v(k);
-        Real z0 = (x3 > 0) ? zp : zm;
-        cons(IM3,k,j,i) -= dt*den*SQR(Omega_0)*(x3-z0);
+        cons(IM3,k,j,i) -= grav*dt*den*SQR(Omega_0)*(x3-z0);
         if (NON_BAROTROPIC_EOS) {
-          cons(IEN,k,j,i) -= dt*den*SQR(Omega_0)*prim(IVZ,k,j,i)*(x3-z0);
+          cons(IEN,k,j,i) -= grav*dt*den*SQR(Omega_0)*prim(IVZ,k,j,i)*(x3-z0);
         }
-      }
-    }
-  }
+
+        // gas and radiation sink at the central region
+        bool in_mid_sink = (sinkwidth > 0.0)
+                           && (x3 >= zsink_l) && (x3 <= zsink_u);
+        bool in_bot_sink = (sinkwidth > 0.0)
+                           && (x3 >= zbot_l)  && (x3 <= zbot_u);
+        bool in_top_sink = (sinkwidth > 0.0)
+                           && (x3 >= ztop_l)  && (x3 <= ztop_u);
+
+        if ((NR_RADIATION_ENABLED || IM_RADIATION_ENABLED)
+            && (in_mid_sink || in_bot_sink || in_top_sink)) {
+
+          // exponential decay factor that is stable for any dt/tau ratio
+          Real window = 0; // smooth window
+          if (in_mid_sink) {
+            window = SQR(std::cos(M_PI*(x3 - z_mid)/sinkwidth));
+          } else if (in_bot_sink) {
+            window = SQR(std::cos(M_PI/2.0*(x3 - zbot_l)/sinkwidth));
+          } else if (in_top_sink) {
+            window = SQR(std::cos(M_PI/2.0*(x3 - ztop_u)/sinkwidth));
+          }
+          Real fac = std::exp(-window * dt / tau_sink);
+
+          // extract velocity and magnetic energy
+          Real vx = cons(IM1,k,j,i)/cons(IDN,k,j,i);
+          Real vy = cons(IM2,k,j,i)/cons(IDN,k,j,i);
+          Real vz = cons(IM3,k,j,i)/cons(IDN,k,j,i);
+          Real emag = (!NON_BAROTROPIC_EOS) ? 0
+                      : 0.5*(SQR(bcc(IB1,k,j,i)) + SQR(bcc(IB2,k,j,i)) + SQR(bcc(IB3,k,j,i)));
+
+          // apply sink
+          Real rho_update = std::max(cons(IDN,k,j,i)*fac, dfloor);
+          cons(IDN,k,j,i) = rho_update;
+          cons(IM1,k,j,i) = rho_update*vx;
+          cons(IM2,k,j,i) = rho_update*vy;
+          cons(IM3,k,j,i) = rho_update*vz;
+          if (NON_BAROTROPIC_EOS) {
+            Real p_update = std::max(prim(IPR,k,j,i)*fac, pfloor);
+            cons(IEN,k,j,i) = emag + p_update/gm1
+                            + 0.5*(SQR(cons(IM1,k,j,i))
+                                  +SQR(cons(IM2,k,j,i))
+                                  +SQR(cons(IM3,k,j,i))
+                                  )/cons(IDN,k,j,i);
+          }
+
+          // zeros radiation intensity in sink
+          for(int ifr=0; ifr<prad->nfreq; ++ifr){
+            for(int n=0; n<prad->nang; ++n){
+              prad->ir(k,j,i,ifr*prad->nang+n) = 0;
+            } // endfor n
+          } // endfor ifr
+        } // endif radiation_enable
+
+      } // endfor i
+    } // endfor j
+  } // endfor k
+
   return;
-}
+} // end SrcTerms
 
 
+// Opacity function
+void FreeFreeOpacity(MeshBlock *pmb, AthenaArray<Real> &prim) {
+  NRRadiation *prad = pmb->pnrrad;
+	int il = pmb->is; int jl = pmb->js; int kl = pmb->ks;
+	int iu = pmb->ie; int ju = pmb->je; int ku = pmb->ke;
+
+	il -= NGHOST;
+	iu += NGHOST;
+
+	if(ju > jl){
+		jl -= NGHOST;
+		ju += NGHOST;
+	}
+
+	if(ku > kl){
+		kl -= NGHOST;
+		ku += NGHOST;
+	}
+
+  for (int k=kl; k<=ku; ++k) {
+		for (int j=jl; j<=ju; ++j) {
+			for (int i=il; i<=iu; ++i) {
+				for (int ifr=0; ifr<prad->nfreq; ++ifr){
+          Real rho  = std::max(prim(IDN,k,j,i), dfloor);
+          Real pgas = std::max(prim(IPR,k,j,i), pfloor);
+          Real tgas_inv  = rho/pgas;
+          Real power_law = rho * tgas_inv*SQR(tgas_inv)*sqrt(tgas_inv);
+					prad->sigma_s(k,j,i,ifr)  = rho * kappa0_sct;
+					prad->sigma_a(k,j,i,ifr)  = rho * kappa0_ffr * power_law;
+          prad->sigma_p(k,j,i,ifr)  = rho * kappa0_ffp * power_law;
+          prad->sigma_pe(k,j,i,ifr) = rho * kappa0_ffp * power_law;
+				} // endfor ifr
+			} // endfor i
+		} // endfor j
+	} // endfor k
+
+} // end FreeFreeOpacity
 
 
+// Hydro and radiation boundary conditions
+// void HydroInnerX3(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+//                   Real time, Real dt,
+//                   int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
+//   // only overwrite density and pressure
+//   for (int k=1; k<=ngh; ++k) {
+//     for (int j=jl; j<=ju; ++j) {
+//       for (int i=il; i<=iu; ++i) {
+//         prim(IDN,kl-k,j,i) = dfloor;
+//         if (NON_BAROTROPIC_EOS)
+//           prim(IPR,kl-k,j,i) = pfloor;
+//         // everything else already set by periodic exchange
+//       } // endfor i
+//     } // endfor j
+//   } // endfor k
+// } // end HydroInnerX3
+//
+// void HydroOuterX3(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+//                   Real time, Real dt,
+//                   int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
+//   // only overwrite density and pressure
+//   for (int k=1; k<=ngh; ++k) {
+//     for (int j=jl; j<=ju; ++j) {
+//       for (int i=il; i<=iu; ++i) {
+//         prim(IDN,ku+k,j,i) = dfloor;
+//         if (NON_BAROTROPIC_EOS)
+//           prim(IPR,ku+k,j,i) = pfloor;
+//         // everything else already set by periodic exchange
+//       } // endfor i
+//     } // endfor j
+//   } // endfor k
+// } // end HydroOuterX3
+//
+// void RadInnerX3(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
+//                 const AthenaArray<Real> &w, FaceField &b,
+//                 AthenaArray<Real> &ir, Real time, Real dt,
+//                 int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
+//
+//   const int& nang = pmb->pnrrad->nang; // angles per octant
+//   const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+//
+//   for (int k=1; k<=ngh; ++k) {
+//     for (int j=jl; j<=ju; ++j) {
+//       for (int i=il; i<=iu; ++i) {
+//         for (int ifr=0; ifr<nfreq; ++ifr) {
+//           for(int n=0; n<nang; ++n) {
+//             int ang = ifr*nang + n;
+//             const Real& miuz=pmb->pnrrad->mu(2,kl,j,i,n);
+//             if (miuz < 0.0) {
+//               ir(kl-k,j,i,ang) = ir(kl,j,i,ang);
+//             } else {
+//               ir(kl-k,j,i,ang) = 0.0;
+//             }
+//           } // endfor n
+//         } // endfor ifr
+//       } // endfor i
+//     } // endfor j
+//   } // endfor k
+//
+// } // end RadInnerX3
+//
+// void RadOuterX3(MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
+//                 const AthenaArray<Real> &w, FaceField &b,
+//                 AthenaArray<Real> &ir, Real time, Real dt,
+//                 int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
+//
+//   const int& nang = pmb->pnrrad->nang; // angles per octant
+//   const int& nfreq = pmb->pnrrad->nfreq; // number of frequency bands
+//
+//   for (int k=1; k<=ngh; ++k) {
+//     for (int j=jl; j<=ju; ++j) {
+//       for (int i=il; i<=iu; ++i) {
+//         for (int ifr=0; ifr<nfreq; ++ifr) {
+//           for(int n=0; n<nang; ++n) {
+//             int ang = ifr*nang + n;
+//             const Real& miuz=pmb->pnrrad->mu(2,ku,j,i,n);
+//             if (miuz > 0.0) {
+//               ir(ku+k,j,i,ang) = ir(ku,j,i,ang);
+//             } else {
+//               ir(ku+k,j,i,ang) = 0.0;
+//             }
+//           } // endfor n
+//         } // endfor ifr
+//       } // endfor i
+//     } // endfor j
+//   } // endfor k
+//
+// } // end RadOuterX3
 
 
-
-
-
-
-
-
-
-
+// User-defined outputs
 namespace {
-
 Real HistoryBxBy(MeshBlock *pmb, int iout) {
   Real bxby = 0;
   int is = pmb->is, ie = pmb->ie, js = pmb->js, je = pmb->je, ks = pmb->ks, ke = pmb->ke;
@@ -557,7 +567,7 @@ Real HistoryBxBy(MeshBlock *pmb, int iout) {
     }
   }
   return bxby;
-}
+} // end HistoryBxBy
 
 Real HistorydVxVy(MeshBlock *pmb, int iout) {
   Real dvxvy = 0.0;
@@ -567,6 +577,9 @@ Real HistorydVxVy(MeshBlock *pmb, int iout) {
   AthenaArray<Real> volume; // 1D array of volumes
   // allocate 1D array for cell volume used in usr def history
   volume.NewAthenaArray(pmb->ncells1);
+
+  const Real qshear = pmb->porb->qshear;
+  const Real Omega_0 = pmb->porb->Omega0;
 
   for (int k=ks; k<=ke; k++) {
     for (int j=js; j<=je; j++) {
@@ -582,5 +595,5 @@ Real HistorydVxVy(MeshBlock *pmb, int iout) {
     }
   }
   return dvxvy;
-}
-} // namespace
+} // end HistorydVxVy
+} // end namespace
